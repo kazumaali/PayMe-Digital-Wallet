@@ -1,54 +1,0 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta http-equiv="CONTENT-TYPE" content="text/html; charset=UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="payme.css">
-    <title>سحب الأموال</title>
-</head>
-<body>
-    <div class="withdraw-container">
-        <h2>سحب إلى البطاقة البنكية</h2>
-        
-        <div class="withdraw-form">
-            <div class="input-group">
-                <label>اختر العملة:</label>
-                <select class="currency-select" id="withdrawCurrency">
-                    <option value="IRR">ريال إيراني (﷼)</option>
-                    <option value="USD">دولار أمريكي ($)</option>
-                </select>
-            </div>
-            
-            <div class="input-group">
-                <label>المبلغ المطلوب سحبه:</label>
-                <input type="number" class="amount-input" id="withdrawAmount" placeholder="أدخل المبلغ">
-                <small class="balance-info">الرصيد المتاح: <span id="availableBalance">0</span></small>
-            </div>
-            
-            <div class="input-group">
-                <label>رقم البطاقة البنكية:</label>
-                <input type="text" class="card-input" id="cardNumber" placeholder="أدخل رقم البطاقة" maxlength="16">
-            </div>
-            
-            <div class="bank-info">
-                <h3>البنوك المدعومة:</h3>
-                <ul>
-                    <li>💳 البنك الوطني الإيراني</li>
-                    <li>💳 بنك ملي إيران</li>
-                    <li>💳 بنك صادرات إيران</li>
-                    <li>💳 بنك تجارت</li>
-                </ul>
-            </div>
-            
-            <div class="withdraw-summary">
-                <p>المبلغ المسحوب: <span id="summaryAmount">0</span> <span id="summaryCurrency">﷼</span></p>
-                <p>العمولة: <span id="fee">0</span> <span id="feeCurrency">﷼</span></p>
-                <p class="total">المبلغ الإجمالي: <span id="totalAmount">0</span> <span id="totalCurrency">﷼</span></p>
-            </div>
-            
-            <button class="withdraw-submit-btn" id="withdrawSubmit">تأكيد السحب</button>
-            <button class="back-btn" onclick="window.location.href='wallet.html'">رجوع إلى المحفظة</button>
-        </div>
-    </div>
-</body>
-</html>
