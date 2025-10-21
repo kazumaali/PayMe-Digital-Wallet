@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="CONTENT-TYPE" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="payme.css">
+    <title>سحب الأموال</title>
+</head>
+<body>
+    <div class="withdraw-container">
+        <h2>سحب إلى البطاقة البنكية</h2>
+        
+        <div class="withdraw-form">
+            <div class="input-group">
+                <label>اختر العملة:</label>
+                <select class="currency-select" id="withdrawCurrency">
+                    <option value="IRR">ريال إيراني (﷼)</option>
+                    <option value="USD">دولار أمريكي ($)</option>
+                </select>
+            </div>
+            
+            <div class="input-group">
+                <label>المبلغ المطلوب سحبه:</label>
+                <input type="number" class="amount-input" id="withdrawAmount" placeholder="أدخل المبلغ">
+                <small class="balance-info">الرصيد المتاح: <span id="availableBalance">0</span></small>
+            </div>
+            
+            <div class="input-group">
+                <label>رقم البطاقة البنكية:</label>
+                <input type="text" class="card-input" id="cardNumber" placeholder="أدخل رقم البطاقة" maxlength="16">
+            </div>
+            
+            <div class="bank-info">
+                <h3>البنوك المدعومة:</h3>
+                <ul>
+                    <li>💳 البنك الوطني الإيراني</li>
+                    <li>💳 بنك ملي إيران</li>
+                    <li>💳 بنك صادرات إيران</li>
+                    <li>💳 بنك تجارت</li>
+                </ul>
+            </div>
+            
+            <div class="withdraw-summary">
+                <p>المبلغ المسحوب: <span id="summaryAmount">0</span> <span id="summaryCurrency">﷼</span></p>
+                <p>العمولة: <span id="fee">0</span> <span id="feeCurrency">﷼</span></p>
+                <p class="total">المبلغ الإجمالي: <span id="totalAmount">0</span> <span id="totalCurrency">﷼</span></p>
+            </div>
+            
+            <button class="withdraw-submit-btn" id="withdrawSubmit">تأكيد السحب</button>
+            <button class="back-btn" onclick="window.location.href='wallet.html'">رجوع إلى المحفظة</button>
+        </div>
+    </div>
+    
+    
+    <script>
+        const CURRENT_USER_ID = 1;
+
+    // جلب الرصيد المتاح
+        async function loadBalance() {
+            try {
+                const response = await fetch(`http://localhost:5000/api/balance/${CURRENT_USER_ID}`);
+                const data = await response.json();
+            
+                if (data.success) {
+                    const currency = document.getElementById('withdrawCurrency').value;
+                    const balance = data.balances[currency] || 0;
+                    document.getElementById('availableBalance').textContent = 
+                        balance.toLocaleString() + getCurrencySymbol(currency);
+                
+                    updateSummary();
+                }
+            } catch (error) {
+                console.error('خطأ في جلب الرصيد:', error);
+            }
+        }
+
+    // تحديث ملخص السحب
+        function updateSummary() {
+            const amount = parseFloat(document.getElementById('withdrawAmount').value) || 0;
+            const currency = document.getElementById('withdrawCurrency').value;
+        
+        // عمولة السحب (1%)
+            const fee = amount * 0.01;
+            const total = amount + fee;
+        
+            document.getElementById('summaryAmount').textContent = amount.toLocaleString();
+            document.getElementById('summaryCurrency').textContent = getCurrencySymbol(currency);
+            document.getElementById('fee').textContent = fee.toLocaleString();
+            document.getElementById('feeCurrency').textContent = getCurrencySymbol(currency);
+            document.getElementById('totalAmount').textContent = total.toLocaleString();
+            document.getElementById('totalCurrency').textContent = getCurrencySymbol(currency);
+        }
+
+    // رمز العملة
+        function getCurrencySymbol(currency) {
+            const symbols = {
+                'USD': '$',
+                'IRR': '﷼', 
+                'USDT': 'T'
+            };
+            return symbols[currency] || currency;
+        }
+
+    // التحقق من رقم البطاقة
+        function validateCardNumber(cardNumber) {
+        // تحقق من أن الرقم 16 رقم ويبدأ بـ 6 (للبطاقات الإيرانية)
+            const regex = /^6[0-9]{15}$/;
+            return regex.test(cardNumber.replace(/\s/g, ''));
+        }
+
+    // تنفيذ السحب
+        async function processWithdrawal() {
+            const amount = parseFloat(document.getElementById('withdrawAmount').value);
+            const currency = document.getElementById('withdrawCurrency').value;
+            const cardNumber = document.getElementById('cardNumber').value.replace(/\s/g, '');
+        
+        // التحقق من البيانات
+            if (!amount || amount <= 0) {
+                alert('⚠️ يرجى إدخال مبلغ صحيح');
+                return;
+            }
+        
+            if (!validateCardNumber(cardNumber)) {
+                alert('⚠️ رقم البطاقة غير صحيح. يجب أن يكون 16 رقماً ويبدأ بـ 6');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/withdraw', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: CURRENT_USER_ID,
+                        amount: amount,
+                        currency: currency,
+                        card_number: cardNumber
+                    })
+                });
+
+                const data = await response.json();
+            
+                if (data.success) {
+                    alert('✅ تم تقديم طلب السحب بنجاح! سيتم التحويل خلال 24 ساعة.');
+                    window.location.href = 'wallet.html';
+                } else {
+                    alert('❌ فشل في السحب: ' + data.message);
+                }
+            } catch (error) {
+                console.error('💥 خطأ في السحب:', error);
+                alert('❌ حدث خطأ أثناء السحب: ' + error.message);
+            }
+        }
+
+    // تنسيق رقم البطاقة تلقائياً
+        function formatCardNumber(input) {
+            let value = input.value.replace(/\s/g, '').replace(/\D/g, '');
+            let formattedValue = '';
+        
+            for (let i = 0; i < value.length; i++) {
+                if (i > 0 && i % 4 === 0) {
+                        formattedValue += ' ';
+                }
+                formattedValue += value[i];
+            }
+        
+            input.value = formattedValue;
+        }
+
+    // استمع لتغييرات المدخلات
+        document.addEventListener('DOMContentLoaded', function() {
+            loadBalance();
+        
+            document.getElementById('withdrawAmount').addEventListener('input', updateSummary);
+            document.getElementById('withdrawCurrency').addEventListener('change', loadBalance);
+            document.getElementById('cardNumber').addEventListener('input', function() {
+                formatCardNumber(this);
+            });
+        
+            document.getElementById('withdrawSubmit').addEventListener('click', processWithdrawal);
+        });
+    </script>
+    
+    
+</body>
+</html>

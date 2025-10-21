@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="CONTENT-TYPE" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="payme.css">
+    <title>استقبال أموال</title>
+</head>
+<body>
+    <div class="receive-container">
+        <h2>استقبال أموال</h2>
+        
+        <div class="receive-options">
+            <div class="input-group">
+                <label>اختر العملة للاستقبال:</label>
+                <select class="currency-select" id="receiveCurrency">
+                    <option value="USD">دولار أمريكي ($)</option>
+                    <option value="IRR">ريال إيراني (﷼)</option>
+                    <option value="USDT">تثر (T)</option>
+                </select>
+            </div>
+            
+            <div class="address-section">
+                <h3>عنوان محفظتك:</h3>
+                <div class="wallet-address" id="walletAddress">
+                    0x742d35Cc6634C0532925a3b8D
+                </div>
+                <button class="copy-btn" id="copyAddress">نسخ العنوان</button>
+            </div>
+            
+            <div class="qr-code-section">
+                <h3>رمز QR للمحفظة:</h3>
+                <div class="qr-code-placeholder">
+                    <!-- سيتم إضافة رمز QR هنا لاحقاً -->
+                    <div class="qr-placeholder">QR Code</div>
+                </div>
+            </div>
+            
+            <div class="bank-details">
+                <h3>تفاصيل الحساب البنكي:</h3>
+                <div class="bank-info">
+                    <p><strong>اسم البنك:</strong> البنك الوطني الإيراني</p>
+                    <p><strong>رقم الحساب:</strong> 1234-5678-9012-3456</p>
+                    <p><strong>اسم صاحب الحساب:</strong> [اسمك]</p>
+                    <p><strong>رمز IBAN:</strong> IR123456789012345678901234</p>
+                </div>
+            </div>
+            
+            <div class="share-options">
+                <h3>مشاركة معلومات الاستقبال:</h3>
+                <div class="share-buttons">
+                    <button class="share-btn" id="shareLink">مشاركة الرابط</button>
+                    <button class="share-btn" id="shareQR">مشاركة رمز QR</button>
+                </div>
+            </div>
+        </div>
+        
+        <button class="back-btn" onclick="window.location.href='wallet.html'">رجوع إلى المحفظة</button>
+    </div>
+    
+    
+    <!-- أضف هذا الـ script قبل </body> -->
+    <script>
+        const CURRENT_USER_ID = 1;
+        let currentAddress = "0x742d35Cc6634C0532925a3b8D" + CURRENT_USER_ID;
+
+    // نسخ عنوان المحفظة
+        function copyAddress() {
+            navigator.clipboard.writeText(currentAddress).then(function() {
+                alert('✅ تم نسخ العنوان إلى الحافظة');
+            }).catch(function() {
+                alert('❌ فشل في نسخ العنوان');
+            });
+        }
+
+    // مشاركة الرابط
+        function shareLink() {
+            const shareText = `عنوان محفظتي: ${currentAddress}`;
+            if (navigator.share) {
+                navigator.share({
+                    title: 'عنوان محفظتي PayMe',
+                    text: shareText
+                });
+            } else {
+                navigator.clipboard.writeText(shareText);
+                alert('✅ تم نسخ رابط المشاركة');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('copyAddress').addEventListener('click', copyAddress);
+            document.getElementById('shareLink').addEventListener('click', shareLink);
+            document.getElementById('walletAddress').textContent = currentAddress;
+        });
+    </script>
+    
+    
+</body>
+</html>

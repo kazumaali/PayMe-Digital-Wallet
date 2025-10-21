@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="CONTENT-TYPE" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="payme.css">
+    <title>تحويل العملات</title>
+</head>
+<body>
+    <div class="exchange-container">
+        <h2>تحويل العملات</h2>
+        
+        <div class="conversion-form">
+            <div class="input-group">
+                <label>المبلغ المراد تحويله:</label>
+                <input type="number" class="amount-input" id="amount" placeholder="أدخل المبلغ" min="0" value="100">
+            </div>
+            
+            <div class="currency-selectors">
+                <div class="input-group">
+                    <label>من عملة:</label>
+                    <select class="currency-select" id="fromCurrency">
+                        <option value="USD">دولار أمريكي ($)</option>
+                        <option value="IRR">ريال إيراني (﷼)</option>
+                        <option value="USDT">تثر (T)</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label>إلى عملة:</label>
+                    <select class="currency-select" id="toCurrency">
+                        <option value="IRR">ريال إيراني (﷼)</option>
+                        <option value="USD">دولار أمريكي ($)</option>
+                        <option value="USDT">تثر (T)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="conversion-result">
+                <h3>نتيجة التحويل:</h3>
+                <p>سوف تحصل على: <strong><span id="convertedAmount">0</span> <span id="resultCurrency">$</span></strong></p>
+                <p>سعر الصرف: <span id="exchangeRate">1</span></p>
+            </div>
+            
+            <button class="convert-btn" id="convertBtn">تحويل الآن</button>
+            <button class="back-btn" onclick="window.location.href='wallet.html'">رجوع إلى المحفظة</button>
+        </div>
+    </div>
+
+    <script>
+        const CURRENT_USER_ID = 1;
+        let currentRates = {};
+
+        // جلب أسعار الصرف
+        async function loadExchangeRates() {
+            try {
+                console.log('🔍 جاري جلب أسعار الصرف...');
+                const response = await fetch('http://localhost:5000/api/exchange-rate');
+                const data = await response.json();
+                console.log('📊 أسعار الصرف المستلمة:', data);
+                
+                if (data.success) {
+                    currentRates = data.rates;
+                    updateConversionPreview();
+                } else {
+                    console.error('❌ فشل في جلب أسعار الصرف');
+                }
+            } catch (error) {
+                console.error('❌ خطأ في جلب أسعار الصرف:', error);
+            }
+        }
+
+        // تحديث معاينة التحويل
+        function updateConversionPreview() {
+            const amount = parseFloat(document.getElementById('amount').value) || 0;
+            const fromCurrency = document.getElementById('fromCurrency').value;
+            const toCurrency = document.getElementById('toCurrency').value;
+            
+            console.log('🔄 تحديث المعاينة:', { amount, fromCurrency, toCurrency });
+            
+            if (amount > 0 && currentRates) {
+                const rateKey = `${fromCurrency}_TO_${toCurrency}`;
+                console.log('🔑 مفتاح السعر:', rateKey);
+                console.log('💰 الأسعار المتاحة:', Object.keys(currentRates));
+                
+                const rate = currentRates[rateKey];
+                console.log('📈 السعر المستخدم:', rate);
+                
+                if (rate) {
+                    const converted = amount * rate;
+                    
+                    // إصلاح المشكلة: عرض الرقم ثم رمز العملة
+                    document.getElementById('convertedAmount').textContent = converted.toFixed(6);
+                    document.getElementById('resultCurrency').textContent = getCurrencySymbol(toCurrency);
+                    document.getElementById('exchangeRate').textContent = rate.toFixed(6);
+                } else {
+                    document.getElementById('convertedAmount').textContent = '0';
+                    document.getElementById('resultCurrency').textContent = getCurrencySymbol(toCurrency);
+                    document.getElementById('exchangeRate').textContent = 'غير متوفر';
+                }
+            }
+        }
+
+        // دالة للحصول على رمز العملة
+        function getCurrencySymbol(currency) {
+            const symbols = {
+                'USD': '$',
+                'IRR': '﷼', 
+                'USDT': 'T'
+            };
+            return symbols[currency] || currency;
+        }
+
+        // تحويل العملة
+        async function convertCurrency() {
+            const amount = parseFloat(document.getElementById('amount').value);
+            const fromCurrency = document.getElementById('fromCurrency').value;
+            const toCurrency = document.getElementById('toCurrency').value;
+            
+            console.log('🚀 بدء التحويل:', { amount, fromCurrency, toCurrency });
+            
+            if (!amount || amount <= 0) {
+                alert('⚠️ يرجى إدخال مبلغ صحيح');
+                return;
+            }
+
+            if (fromCurrency === toCurrency) {
+                alert('⚠️ لا يمكن التحويل لنفس العملة');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/convert', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: CURRENT_USER_ID,
+                        from_currency: fromCurrency,
+                        to_currency: toCurrency,
+                        amount: amount
+                    })
+                });
+
+                console.log('📨 Response status:', response.status);
+                const data = await response.json();
+                console.log('📊 Response data:', data);
+                
+                if (data.success) {
+                    alert('✅ تم التحويل بنجاح!');
+                    window.location.href = 'wallet.html';
+                } else {
+                    alert('❌ فشل في التحويل: ' + (data.message || 'سبب غير معروف'));
+                }
+            } catch (error) {
+                console.error('💥 خطأ في التحويل:', error);
+                alert('❌ حدث خطأ أثناء التحويل: ' + error.message);
+            }
+        }
+
+        // استمع لتغييرات المدخلات
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 صفحة التحويل جاهزة');
+            
+            // ربط الأحداث
+            document.getElementById('amount').addEventListener('input', updateConversionPreview);
+            document.getElementById('fromCurrency').addEventListener('change', updateConversionPreview);
+            document.getElementById('toCurrency').addEventListener('change', updateConversionPreview);
+            document.getElementById('convertBtn').addEventListener('click', convertCurrency);
+            
+            // تحميل البيانات الأولية
+            loadExchangeRates();
+        });
+    </script>
+</body>
+</html>
