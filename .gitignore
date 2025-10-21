@@ -205,3 +205,32 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# 🔒 ملفات قاعدة البيانات
+*.db
+*.sqlite
+*.sqlite3
+
+# 🔒 ملفات الإعدادات
+config.py
+secrets.py
+.env
+
+# 🔒 المفاتيح والأمان
+*.key
+*.pem
+*.crt
+
+# 🐍 بايثون
+__pycache__/
+*.pyc
+*.pyo
+
+# 📊 السجلات
+*.log
+logs/
+
+# 📁 مؤقت
+temp/
+tmp/
+.tmp/
