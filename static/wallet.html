@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="CONTENT-TYPE" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="payme.css">
+    <title>PayMe</title>
+</head>
+<body>
+    
+    
+    <!-- أضف هذا قبل قسم الأرصدة -->
+    <div class="notifications-panel" id="notificationsPanel">
+        <h3>الإشعارات <span class="notification-badge" id="notificationBadge">0</span></h3>
+        <div class="notifications-list" id="notificationsList">
+        <!-- الإشعارات تظهر هنا -->
+        </div>
+    </div>
+    
+    
+    <section class="wallet" id="wallet">
+        <h2 class="balance-d" id="Dollar">0$</h2>
+        <h2 class="balance-r" id="Rial">0﷼</h2>
+        <h2 class="balance-t" id="Tether">0T</h2>
+        
+        <nav>
+            <button class="withdraw" id="withdraw" onclick="withdrawM()"><a href="withdraw.html">سحب</a></button>
+            <button class="recieve" id="recieve" onclick="recieveM()"><a href="recieve.html">تلقي</a></button>
+            <button class="send" id="send" onclick="sendM()"><a href="send.html">إرسال</a></button>
+            <button class="exchange" id="exchange" onclick="exchangeM()"><a href="exchange.html">تحويل الممتلكات</a></button>
+        </nav>
+    </section>
+    
+    <section>
+        <table class="usd-price" id="usdP">
+            <tr>
+                <td id="RIAL">0﷼</td>
+                <td id="USD">USD</td>
+            </tr>
+        </table>
+    </section>
+
+    <script>
+        // بيانات المستخدم (سنغير هذا لاحقاً لنظام تسجيل الدخول)
+        const CURRENT_USER_ID = 1;
+
+        // جلب أرصدة المستخدم من الخادم
+        async function loadBalances() {
+            try {
+                const response = await fetch(`/api/balance/${CURRENT_USER_ID}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('Dollar').textContent = data.balances.USD + '$';
+                    document.getElementById('Rial').textContent = data.balances.IRR + '﷼';
+                    document.getElementById('Tether').textContent = data.balances.USDT + 'T';
+                }
+            } catch (error) {
+                console.error('خطأ في جلب الأرصدة:', error);
+            }
+        }
+
+        // جلب أسعار الصرف من الخادم
+        async function loadExchangeRates() {
+            try {
+                const response = await fetch('/api/exchange-rate');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const usdToIrr = data.rates.USD_TO_IRR;
+                    document.getElementById('RIAL').textContent = usdToIrr.toLocaleString() + '﷼';
+                    document.getElementById('USD').textContent = '1 USD =';
+                }
+            } catch (error) {
+                console.error('خطأ في جلب أسعار الصرف:', error);
+            }
+        }
+
+        // تحديث البيانات كل 10 ثواني
+        function startAutoRefresh() {
+            loadBalances();
+            loadExchangeRates();
+            setInterval(() => {
+                loadBalances();
+                loadExchangeRates();
+            }, 10000); // كل 10 ثواني
+        }
+
+        // تشغيل عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', function() {
+            startAutoRefresh();
+        });
+
+        // دوال الأزرار (سيتم تطويرها لاحقاً)
+        function withdrawM() {
+            console.log('فتح صفحة السحب');
+        }
+
+        function recieveM() {
+            console.log('فتح صفحة الاستقبال');
+        }
+
+        function sendM() {
+            console.log('فتح صفحة الإرسال');
+        }
+
+        function exchangeM() {
+            console.log('فتح صفحة التحويل');
+        }
+    
+    // تحديث لوحة المعلومات لتعرض طلبات السحب pending
+        async function loadPendingWithdrawals() {
+            try {
+                const response = await fetch(`/api/withdrawal-history/${CURRENT_USER_ID}`);
+                const data = await response.json();
+        
+                if (data.success && data.withdrawals.length > 0) {
+                    const pending = data.withdrawals.filter(w => w.status === 'pending');
+                    if (pending.length > 0) {
+                // إضافة إشعار بوجود طلبات سحب pending
+                        console.log(`لديك ${pending.length} طلبات سحب قيد المعالجة`);
+                    }
+                }
+            } catch (error) {
+                console.error('خطأ في جلب طلبات السحب:', error);
+            }
+        }
+
+// تحديث دالة startAutoRefresh
+        function startAutoRefresh() {
+            loadBalances();
+            loadExchangeRates();
+            loadPendingWithdrawals(); // ⬅️ أضف هذا
+            setInterval(() => {
+                loadBalances();
+                loadExchangeRates();
+                loadPendingWithdrawals(); // ⬅️ وهذا
+            }, 10000);
+        }
+    
+    // التحقق من المصادقة أولاً
+        function checkAuth() {
+            const sessionToken = localStorage.getItem('session_token');
+            const userId = localStorage.getItem('user_id');
+        
+            if (!sessionToken || !userId) {
+        // إذا لم يكن مسجلاً الدخول، توجيه إلى صفحة التسجيل
+                window.location.href = 'login.html';
+                return false;
+            }
+    
+            return { sessionToken, userId };
+        }
+
+// جلب أرصدة المستخدم من الخادم
+        async function loadBalances() {
+            const auth = checkAuth();
+            if (!auth) return;
+
+            try {
+                const response = await fetch(`/api/balance`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': auth.sessionToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+        
+                if (response.status === 401) {
+            // إذا كانت الجلسة منتهية
+                    localStorage.removeItem('session_token');
+                    localStorage.removeItem('user_id');
+                    window.location.href = 'login.html';
+                    return;
+                }
+        
+                const data = await response.json();
+        
+                if (data.success) {
+                    document.getElementById('Dollar').textContent = data.balances.USD + '$';
+                    document.getElementById('Rial').textContent = data.balances.IRR + '﷼';
+                    document.getElementById('Tether').textContent = data.balances.USDT + 'T';
+                }
+            } catch (error) {
+                console.error('خطأ في جلب الأرصدة:', error);
+            }
+        }
+
+// تسجيل الخروج
+        function logout() {
+            localStorage.removeItem('session_token');
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('username');
+            window.location.href = 'login.html';
+        }
+
+// إضافة زر تسجيل الخروج إلى الواجهة
+        function addLogoutButton() {
+            const walletSection = document.getElementById('wallet');
+            const logoutBtn = document.createElement('button');
+            logoutBtn.textContent = 'تسجيل الخروج';
+            logoutBtn.className = 'logout-btn';
+            logoutBtn.onclick = logout;
+            logoutBtn.style.cssText = `
+                background: #dc3545;
+                color: white;
+                border: none;
+                padding: 8px 15px;
+                border-radius: 5px;
+                cursor: pointer;
+                margin-top: 10px;
+                font-size: 14px;
+            `;
+    
+            walletSection.appendChild(logoutBtn);
+        }
+
+// تشغيل عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', function() {
+            const auth = checkAuth();
+            if (auth) {
+                addLogoutButton();
+                startAutoRefresh();
+            }
+        });
+        
+        // جلب وعرض الإشعارات
+        async function loadNotifications() {
+            const auth = checkAuth();
+            if (!auth) return;
+
+            try {
+                const response = await fetch('/api/notifications', {
+                    headers: {
+                        'Authorization': auth.sessionToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    const notificationsList = document.getElementById('notificationsList');
+                    const notificationBadge = document.getElementById('notificationBadge');
+            
+                    notificationBadge.textContent = data.notifications.length;
+            
+                    if (data.notifications.length === 0) {
+                        notificationsList.innerHTML = '<p class="no-notifications">لا توجد إشعارات جديدة</p>';
+                    } else {
+                        notificationsList.innerHTML = data.notifications.map(notification => `
+                            <div class="notification-item ${notification.type}" data-id="${notification.id}">
+                                <div class="notification-header">
+                                    <strong>${notification.title}</strong>
+                                    <button class="mark-read-btn" onclick="markNotificationRead(${notification.id})">✕</button>
+                                </div>
+                                <div class="notification-body">${notification.message}</div>
+                                <div class="notification-time">${new Date(notification.date).toLocaleString('ar-SA')}</div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('خطأ في جلب الإشعارات:', error);
+            }
+        }
+
+// تحديد إشعار كمقروء
+        async function markNotificationRead(notificationId) {
+            const auth = checkAuth();
+            if (!auth) return;
+
+            try {
+                const response = await fetch(`/api/notifications/${notificationId}/read`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': auth.sessionToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+            // إخفاء الإشعار من الواجهة
+                    const notificationElement = document.querySelector(`[data-id="${notificationId}"]`);
+                    if (notificationElement) {
+                        notificationElement.style.opacity = '0';
+                        setTimeout(() => {
+                            notificationElement.remove();
+                            loadNotifications(); // إعادة تحميل العد
+                        }, 300);
+                    }
+                }
+            } catch (error) {
+                console.error('خطأ في تحديث الإشعار:', error);
+            }
+        }
+
+// تحديث دالة startAutoRefresh
+        function startAutoRefresh() {
+            loadBalances();
+            loadExchangeRates();
+            loadPendingWithdrawals();
+            loadNotifications(); // أضف هذا
+            setInterval(() => {
+                loadBalances();
+                loadExchangeRates();
+                loadPendingWithdrawals();
+                loadNotifications(); // وهذا
+            }, 30000);
+        }
+    
+    </script>
+</body>
+</html>
