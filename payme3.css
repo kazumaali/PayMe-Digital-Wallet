@@ -1,0 +1,53 @@
+.logout a {
+    display: flex;
+    text-decoration: none;
+    color: white;
+    background-color: red;
+    font-family: sans-serif;
+    text-align: center;
+    width: 50px;
+    border-radius: 10%;
+    border: 3px ridge #FFD700;
+    box-shadow: 5px 5px 5px rgba(0,0,0,0.8);
+    transition: 0.3s ease;
+    posision: fixed;
+    z-index: 1000px;
+}
+
+.wallet {
+    padding: 5px;
+    margin-top: 10px;
+    background: blue;
+    width:95%;
+    min-height: 250px auto;
+    border-radius: 10%;
+    box-shadow: 5px 5px 5px rgba(0,0,0,0.8);
+}
+
+.wallet p {
+    font-family: sans-serif;
+    font-size: 50px;
+    color: white;
+    display: block;
+}
+
+.wallet a {
+    display: block;
+    background-color: cadetblue;
+    color: white;
+    text-decoration: none;
+    margin: 10px;
+    width: relative;
+    text-align: center;
+    margin-left: 10px;
+    border-radius: 20%;
+    font-size: 35px;
+}
+
+.usd-price {
+    margin-left: 15px;
+    width: 90%;
+    text-align: center;
+    background: white;
+    box-shadow: 5px 5px 5px rgba(0,0,0,0.8);
+}
