@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import sys
+import re
 
 # Add the current directory to Python path to import services
 sys.path.append(os.path.dirname(__file__))
@@ -23,14 +24,245 @@ try:
     from services.wallet_service import WalletService
     from services.payment_service import PaymentService
     print("✅ Successfully imported all services")
+    
+    # Initialize services
+    exchange_service = ExchangeService()
+    wallet_service = WalletService()
+    payment_service = PaymentService()
+    
 except ImportError as e:
     print(f"❌ Import error: {e}")
-    print("⚠️  Running without additional services")
+    print("⚠️  Running with built-in exchange service only")
+    
+    # Fallback: Use the built-in exchange service
+    class ExchangeService:
+        def __init__(self):
+            self.cache = {}
+            self.cache_timeout = 300  # 5 minutes
+        
+        def get_current_rates(self):
+            """Get current exchange rates from tgju.org with improved scraping"""
+            cache_key = 'exchange_rates'
+            if cache_key in self.cache:
+                cached_data, timestamp = self.cache[cache_key]
+                if datetime.now() - timestamp < timedelta(seconds=self.cache_timeout):
+                    return cached_data
+            
+            try:
+                print("🌐 Fetching live exchange rates from tgju.org...")
+                
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Cache-Control': 'max-age=0'
+                }
+                
+                # Try multiple URLs and methods
+                usd_to_irr = self.try_multiple_sources(headers)
+                
+                if not usd_to_irr:
+                    print("❌ Could not extract price from any source, using fallback")
+                    usd_to_irr = 1070000  # Current approximate rate
+                
+                print(f"✅ Current USD to IRR rate: {usd_to_irr:,.0f}")
+                    
+            except Exception as e:
+                print(f"❌ Error fetching rates: {e}")
+                usd_to_irr = 1070000  # Current fallback rate
+            
+            rates = {
+                'USD_IRR': float(usd_to_irr),
+                'IRR_USD': 1 / float(usd_to_irr),
+                'USD_USDT': 1.0,
+                'USDT_USD': 1.0,
+                'USDT_IRR': float(usd_to_irr),
+                'IRR_USDT': 1 / float(usd_to_irr),
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            self.cache[cache_key] = (rates, datetime.now())
+            return rates
+        
+        def try_multiple_sources(self, headers):
+            """Try multiple methods to get the USD price"""
+            methods = [
+                self.scrape_tgju_direct,
+                self.scrape_tgju_api,
+                self.scrape_alternative_site
+            ]
+            
+            for method in methods:
+                try:
+                    rate = method(headers)
+                    if rate and 500000 < rate < 2000000:  # Reasonable range
+                        print(f"✅ Success with {method.__name__}: {rate:,.0f}")
+                        return rate
+                except Exception as e:
+                    print(f"❌ {method.__name__} failed: {e}")
+                    continue
+            
+            return None
+        
+        def scrape_tgju_direct(self, headers):
+            """Direct scraping from tgju.org"""
+            response = requests.get(
+                'https://www.tgju.org/profile/price_dollar_rl',
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Method 1: Look for the main price in various selectors
+            price_selectors = [
+                '[data-col="info.last_price"]',
+                '.price',
+                '.value',
+                '.info-price',
+                'span.value',
+                'div.value',
+                '.market-price',
+                '[itemprop="price"]'
+            ]
+            
+            for selector in price_selectors:
+                elements = soup.select(selector)
+                for element in elements:
+                    price_text = element.get_text().strip()
+                    price = self.clean_price(price_text)
+                    if price:
+                        return price
+            
+            # Method 2: Look for specific data attributes
+            data_elements = soup.find_all(attrs={"data-col": "info.last_price"})
+            for element in data_elements:
+                price_text = element.get_text().strip()
+                price = self.clean_price(price_text)
+                if price:
+                    return price
+            
+            # Method 3: Search for numeric patterns in the entire page
+            text = soup.get_text()
+            price_patterns = [
+                r'(\d{1,3}(?:,\d{3})+,?\d*)',  # Numbers with Iranian commas
+                r'(\d{6,7})',  # 6-7 digit numbers
+            ]
+            
+            for pattern in price_patterns:
+                matches = re.findall(pattern, text)
+                for match in matches:
+                    price = self.clean_price(match)
+                    if price and 1000000 < price < 1200000:  # Current expected range
+                        return price
+            
+            return None
+        
+        def scrape_tgju_api(self, headers):
+            """Try to find API endpoints or JSON data"""
+            try:
+                # Sometimes tgju has API-like endpoints
+                api_response = requests.get(
+                    'https://api.tgju.org/v1/data/sana/json',
+                    headers=headers,
+                    timeout=5
+                )
+                if api_response.status_code == 200:
+                    data = api_response.json()
+                    # Look for USD price in the response
+                    for key, value in data.items():
+                        if 'price_dollar' in key.lower() and 'p' in value:
+                            price = self.clean_price(str(value['p']))
+                            if price:
+                                return price
+            except:
+                pass
+            
+            try:
+                # Another potential API endpoint
+                api_response = requests.get(
+                    'https://www.tgju.org/ajax/price.json',
+                    headers=headers,
+                    timeout=5
+                )
+                if api_response.status_code == 200:
+                    data = api_response.json()
+                    # Parse the JSON response for USD price
+                    usd_price = data.get('price_dollar_rl', {}).get('price')
+                    if usd_price:
+                        return self.clean_price(str(usd_price))
+            except:
+                pass
+            
+            return None
+        
+        def scrape_alternative_site(self, headers):
+            """Fallback to alternative sites"""
+            try:
+                response = requests.get(
+                    'https://www.tgju.org/',
+                    headers=headers,
+                    timeout=10
+                )
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Look for USD price in the main page
+                usd_indicators = ['دلار', 'dollar', 'USD', 'price_dollar']
+                
+                for indicator in usd_indicators:
+                    elements = soup.find_all(string=re.compile(indicator, re.IGNORECASE))
+                    for element in elements:
+                        parent = element.parent
+                        if parent:
+                            # Look for numbers near the indicator
+                            text = parent.get_text()
+                            price_pattern = r'(\d{1,3}(?:,\d{3})+,?\d*)'
+                            matches = re.findall(price_pattern, text)
+                            for match in matches:
+                                price = self.clean_price(match)
+                                if price and 1000000 < price < 1200000:
+                                    return price
+            except:
+                pass
+            
+            return None
+        
+        def clean_price(self, price_text):
+            """Clean and convert price text to float"""
+            try:
+                # Remove commas (Iranian format uses commas as thousand separators)
+                cleaned = price_text.replace(',', '').strip()
+                
+                # Remove any non-numeric characters except decimal point
+                cleaned = ''.join(c for c in cleaned if c.isdigit() or c == '.')
+                
+                # Remove multiple decimal points
+                if '.' in cleaned:
+                    parts = cleaned.split('.')
+                    if len(parts) > 2:
+                        cleaned = parts[0] + '.' + ''.join(parts[1:])
+                
+                if cleaned:
+                    price = float(cleaned)
+                    # Validate that it's a reasonable exchange rate
+                    if 500000 < price < 2000000:
+                        return price
+            except Exception as e:
+                print(f"Error cleaning price '{price_text}': {e}")
+            
+            return None
 
-# Initialize services
-exchange_service = ExchangeService()
-wallet_service = WalletService()
-payment_service = PaymentService()
+    exchange_service = ExchangeService()
+    wallet_service = None
+    payment_service = None
 
 # Simple JWT-like authentication (for demo purposes)
 def create_token(user_id):
@@ -116,110 +348,6 @@ def init_db():
     conn.close()
     print("✅ Database initialized successfully")
 
-# Exchange Service - Updated with better scraping
-class ExchangeService:
-    def get_current_rates(self):
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            response = requests.get('https://www.tgju.org/profile/price_dollar_rl', 
-                                  timeout=10, headers=headers)
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Multiple strategies to find the price
-            usd_to_irr = self.extract_price(soup)
-            
-            if not usd_to_irr:
-                print("Could not extract price, using fallback")
-                usd_to_irr = 1070000  # Current approximate rate
-                
-        except Exception as e:
-            print(f"Error fetching rates: {e}")
-            usd_to_irr = 1070000  # Current fallback rate
-        
-        rates = {
-            'USD_IRR': usd_to_irr,
-            'IRR_USD': 1 / usd_to_irr,
-            'USD_USDT': 1.0,
-            'USDT_USD': 1.0,
-            'USDT_IRR': usd_to_irr,
-            'IRR_USDT': 1 / usd_to_irr,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-        return rates
-    
-    def extract_price(self, soup):
-        """Try multiple strategies to extract the USD price"""
-        # Strategy 1: Look for the main price display
-        price_selectors = [
-            '[data-col="info.last_price"]',
-            '.price',
-            '.value',
-            '.info-price',
-            '#main > div > div > div > div.market-section > ul > li:nth-child(1) > span',
-            'span.value',
-            'div.value'
-        ]
-        
-        for selector in price_selectors:
-            try:
-                element = soup.select_one(selector)
-                if element:
-                    price_text = element.get_text().strip()
-                    price = self.clean_price(price_text)
-                    if price and 100000 < price < 2000000:  # Reasonable range
-                        print(f"Found price using selector '{selector}': {price}")
-                        return price
-            except Exception as e:
-                continue
-        
-        # Strategy 2: Look for tables or specific structures
-        tables = soup.find_all('table')
-        for table in tables:
-            rows = table.find_all('tr')
-            for row in rows:
-                cells = row.find_all('td')
-                for i, cell in enumerate(cells):
-                    if 'دلار' in cell.text or 'dollar' in cell.text.lower():
-                        if i + 1 < len(cells):
-                            price = self.clean_price(cells[i + 1].text)
-                            if price:
-                                return price
-        
-        # Strategy 3: Search for numeric values that look like prices
-        import re
-        text = soup.get_text()
-        # Look for numbers with commas (Iranian format)
-        price_patterns = [
-            r'(\d{1,3}(?:,\d{3})*)',  # Numbers with commas
-            r'(\d{6,7})',  # 6-7 digit numbers (current IRR range)
-        ]
-        
-        for pattern in price_patterns:
-            matches = re.findall(pattern, text)
-            for match in matches:
-                price = self.clean_price(match)
-                if price and 1000000 < price < 1200000:  # Current expected range
-                    print(f"Found price using regex: {price}")
-                    return price
-        
-        return None
-    
-    def clean_price(self, price_text):
-        """Clean and convert price text to float"""
-        try:
-            # Remove commas and convert to float
-            cleaned = price_text.replace(',', '').strip()
-            # Remove any non-numeric characters except decimal point
-            cleaned = ''.join(c for c in cleaned if c.isdigit() or c == '.')
-            if cleaned:
-                return float(cleaned)
-        except Exception as e:
-            print(f"Error cleaning price '{price_text}': {e}")
-        return None
-
 # Initialize database
 init_db()
 
@@ -263,8 +391,25 @@ def test_services():
 
 @app.route('/api/exchange-rates', methods=['GET'])
 def get_exchange_rates():
-    rates = exchange_service.get_current_rates()
-    return jsonify(rates)
+    try:
+        print("🔄 Fetching exchange rates...")
+        rates = exchange_service.get_current_rates()
+        print(f"✅ Rates fetched: 1 USD = {rates['USD_IRR']:,.0f} IRR")
+        return jsonify(rates)
+    except Exception as e:
+        print(f"❌ Error in exchange-rates endpoint: {e}")
+        # Return fallback rates
+        fallback_rates = {
+            'USD_IRR': 1070000,
+            'IRR_USD': 0.000093,
+            'USD_USDT': 1.0,
+            'USDT_USD': 1.0,
+            'USDT_IRR': 1070000,
+            'IRR_USDT': 0.000093,
+            'timestamp': datetime.utcnow().isoformat(),
+            'note': 'Using fallback rates due to error'
+        }
+        return jsonify(fallback_rates)
 
 @app.route('/api/wallet/balance', methods=['GET'])
 @require_auth
@@ -558,4 +703,5 @@ if __name__ == '__main__':
     print("📍 API will be available at: http://localhost:5000")
     print("📊 Test services at: http://localhost:5000/api/test-services")
     print("🔗 Test API at: http://localhost:5000/api/test")
+    print("💱 Test exchange rates at: http://localhost:5000/api/exchange-rates")
     app.run(debug=True, host='0.0.0.0', port=5000)
