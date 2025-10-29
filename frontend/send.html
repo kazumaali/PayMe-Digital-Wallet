@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="CONTENT-TYPE" content="text/html; charset=UTF-8">
+    <title>PayMe Digital Wallet/Send</title>
+    <link rel="stylesheet" href="payme5.css">
+</head>
+<body>
+    <div class="logout"><a href="wallet.html">Back to Wallet</a></div>
+    
+    <div class="send-container">
+        <h2>Send Money</h2>
+        
+        <div class="form-group">
+            <label for="currency">Currency:</label>
+            <select id="currency" onchange="updateBalance()">
+                <option value="USD">USD</option>
+                <option value="USDT">USDT</option>
+                <option value="IRR">IRR</option>
+            </select>
+        </div>
+        
+        <div class="balance-info">
+            Available: <span id="availableBalance">$0.00</span>
+        </div>
+        
+        <div class="form-group" id="walletRecipient">
+            <label for="recipientEmail">Recipient Email:</label>
+            <input type="email" id="recipientEmail" placeholder="Enter recipient's email">
+        </div>
+        
+        <div class="form-group">
+            <label for="amount">Amount:</label>
+            <input type="number" id="amount" placeholder="0.00" min="0" step="0.01">
+        </div>
+        
+        <div class="form-group">
+            <label for="message">Message (Optional):</label>
+            <textarea id="message" placeholder="Add a message to recipient" rows="3"></textarea>
+        </div>
+        
+        <button class="send-button" onclick="sendMoney()">Send Money</button>
+        
+        <div id="sendMessage" style="margin-top: 15px; padding: 10px; border-radius: 5px; display: none;"></div>
+    </div>
+
+    <script src="send.js"></script>
+</body>
+</html>
