@@ -1,3 +1,9 @@
+const API_BASE = 'http://localhost:5000/api';
+
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
 function login() {
             const email = document.getElementById("emailInput").value.trim().toLowerCase();
             const password = document.getElementById("passwordInput").value;
@@ -30,6 +36,8 @@ function login() {
                 localStorage.setItem('isLoggedIn', 'true');
                 
                 showLoginMessage('Admin login successful! Redirecting...', 'success');
+                localStorage.setItem('authToken', 'your-jwt-token-from-backend');
+// The backend should return a JWT token upon successful login
                 
                 // Redirect to wallet.html
                 setTimeout(() => {
@@ -65,6 +73,10 @@ function login() {
             localStorage.setItem('isLoggedIn', 'true');
             
             showLoginMessage('Login successful! Redirecting...', 'success');
+    
+            // In the login function after successful authentication
+    localStorage.setItem('authToken', 'your-jwt-token-from-backend');
+// The backend should return a JWT token upon successful login
             
             // Redirect to wallet.html
             setTimeout(() => {

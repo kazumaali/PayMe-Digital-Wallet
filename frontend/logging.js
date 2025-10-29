@@ -1,3 +1,9 @@
+const API_BASE = 'http://localhost:5000/api';
+
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
 const username = document.getElementById('signupUsername');
 const emailAdd = document.getElementById("emailAdd");
 const CrPass = document.getElementById("CrPass");
@@ -160,6 +166,9 @@ function verifyEmail() {
         saveUser(pendingUserData);
         
         showMessage('Email verified successfully! Welcome!', 'green');
+        
+        localStorage.setItem('authToken', 'your-jwt-token-from-backend');
+// The backend should return a JWT token upon successful verification
 
         // Redirect to wallet.html after successful verification
         setTimeout(() => {

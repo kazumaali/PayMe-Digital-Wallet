@@ -1,3 +1,9 @@
+const API_BASE = 'http://localhost:5000/api';
+
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
 // Exchange rates (for demonstration)
         const exchangeRates = {
             USD: { USDT: 1.00, IRR: 42000 },

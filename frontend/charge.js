@@ -1,3 +1,9 @@
+const API_BASE = 'http://localhost:5000/api';
+
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
 const currencySelect = document.getElementById('currency');
 const cardSelection = document.getElementById('cardSelection');
 const amountSection = document.getElementById('amountSection');

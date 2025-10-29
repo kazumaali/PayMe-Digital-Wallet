@@ -1,3 +1,9 @@
+const API_BASE = 'http://localhost:5000/api';
+
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
 let selectedCurrency = 'USD';
 let userCards = [];
 let currentBalance = { USD: 0, IRR: 0 };

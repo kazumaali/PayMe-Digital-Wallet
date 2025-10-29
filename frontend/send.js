@@ -1,3 +1,9 @@
+const API_BASE = 'http://localhost:5000/api';
+
+function getAuthToken() {
+    return localStorage.getItem('authToken');
+}
+
 function updateBalance() {
     const currency = document.getElementById('currency').value;
     const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
