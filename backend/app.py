@@ -95,24 +95,27 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Exchange Service
+# Exchange Service - Updated with better scraping
 class ExchangeService:
     def get_current_rates(self):
         try:
-            response = requests.get('https://www.tgju.org/profile/price_dollar_rl', timeout=10)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get('https://www.tgju.org/profile/price_dollar_rl', 
+                                  timeout=10, headers=headers)
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Try to find the price (this might need adjustment based on the actual page structure)
-            price_element = soup.find('span', {'class': 'value'}) or soup.find('div', {'class': 'price'})
-            if price_element:
-                price_text = price_element.text.strip().replace(',', '')
-                usd_to_irr = float(price_text)
-            else:
-                usd_to_irr = 42000  # Fallback
+            # Multiple strategies to find the price
+            usd_to_irr = self.extract_price(soup)
+            
+            if not usd_to_irr:
+                print("Could not extract price, using fallback")
+                usd_to_irr = 1070000  # Current approximate rate
                 
         except Exception as e:
             print(f"Error fetching rates: {e}")
-            usd_to_irr = 42000  # Fallback rate
+            usd_to_irr = 1070000  # Current fallback rate
         
         rates = {
             'USD_IRR': usd_to_irr,
@@ -125,6 +128,76 @@ class ExchangeService:
         }
         
         return rates
+    
+    def extract_price(self, soup):
+        """Try multiple strategies to extract the USD price"""
+        # Strategy 1: Look for the main price display
+        price_selectors = [
+            '[data-col="info.last_price"]',
+            '.price',
+            '.value',
+            '.info-price',
+            '#main > div > div > div > div.market-section > ul > li:nth-child(1) > span',
+            'span.value',
+            'div.value'
+        ]
+        
+        for selector in price_selectors:
+            try:
+                element = soup.select_one(selector)
+                if element:
+                    price_text = element.get_text().strip()
+                    price = self.clean_price(price_text)
+                    if price and 100000 < price < 2000000:  # Reasonable range
+                        print(f"Found price using selector '{selector}': {price}")
+                        return price
+            except Exception as e:
+                continue
+        
+        # Strategy 2: Look for tables or specific structures
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cells = row.find_all('td')
+                for i, cell in enumerate(cells):
+                    if 'دلار' in cell.text or 'dollar' in cell.text.lower():
+                        if i + 1 < len(cells):
+                            price = self.clean_price(cells[i + 1].text)
+                            if price:
+                                return price
+        
+        # Strategy 3: Search for numeric values that look like prices
+        import re
+        text = soup.get_text()
+        # Look for numbers with commas (Iranian format)
+        price_patterns = [
+            r'(\d{1,3}(?:,\d{3})*)',  # Numbers with commas
+            r'(\d{6,7})',  # 6-7 digit numbers (current IRR range)
+        ]
+        
+        for pattern in price_patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                price = self.clean_price(match)
+                if price and 1000000 < price < 1200000:  # Current expected range
+                    print(f"Found price using regex: {price}")
+                    return price
+        
+        return None
+    
+    def clean_price(self, price_text):
+        """Clean and convert price text to float"""
+        try:
+            # Remove commas and convert to float
+            cleaned = price_text.replace(',', '').strip()
+            # Remove any non-numeric characters except decimal point
+            cleaned = ''.join(c for c in cleaned if c.isdigit() or c == '.')
+            if cleaned:
+                return float(cleaned)
+        except Exception as e:
+            print(f"Error cleaning price '{price_text}': {e}")
+        return None
 
 # Initialize database
 init_db()
