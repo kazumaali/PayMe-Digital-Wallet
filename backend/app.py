@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import json
@@ -8,10 +8,29 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 import os
+import sys
+
+# Add the current directory to Python path to import services
+sys.path.append(os.path.dirname(__file__))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app)
+
+# Import services
+try:
+    from services.exchange_service import ExchangeService
+    from services.wallet_service import WalletService
+    from services.payment_service import PaymentService
+    print("✅ Successfully imported all services")
+except ImportError as e:
+    print(f"❌ Import error: {e}")
+    print("⚠️  Running without additional services")
+
+# Initialize services
+exchange_service = ExchangeService()
+wallet_service = WalletService()
+payment_service = PaymentService()
 
 # Simple JWT-like authentication (for demo purposes)
 def create_token(user_id):
@@ -19,7 +38,8 @@ def create_token(user_id):
 
 def verify_token(token):
     # In a real app, you'd validate the token properly
-    return True
+    # For demo, we'll just check if it exists
+    return bool(token and len(token) > 10)
 
 def get_user_from_token(token):
     # Simple demo implementation
@@ -94,6 +114,7 @@ def init_db():
     
     conn.commit()
     conn.close()
+    print("✅ Database initialized successfully")
 
 # Exchange Service - Updated with better scraping
 class ExchangeService:
@@ -201,7 +222,6 @@ class ExchangeService:
 
 # Initialize database
 init_db()
-exchange_service = ExchangeService()
 
 # Helper functions for database operations
 def get_db_connection():
@@ -222,16 +242,24 @@ def require_auth(f):
 # Routes
 @app.route('/')
 def hello():
-    return jsonify({"message": "PayMe Wallet API", "status": "Running"})
-    
-    
-@app.route('/')
-def serve_index():
-    return send_from_directory('../frontend', 'index.html')
+    return jsonify({"message": "PayMe Wallet API", "status": "Running", "version": "1.0"})
 
-@app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('../frontend', path)
+@app.route('/api/test')
+def test_api():
+    return jsonify({"message": "API is working!", "timestamp": datetime.utcnow().isoformat()})
+
+@app.route('/api/test-services')
+def test_services():
+    try:
+        rates = exchange_service.get_current_rates()
+        return jsonify({
+            'status': 'Services connected successfully',
+            'exchange_rate': rates.get('USD_IRR', 'N/A'),
+            'services': ['exchange', 'wallet', 'payment'],
+            'timestamp': datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'error': f'Service connection failed: {str(e)}'}), 500
 
 @app.route('/api/exchange-rates', methods=['GET'])
 def get_exchange_rates():
@@ -301,6 +329,93 @@ def get_usdt_address():
     
     conn.close()
     return jsonify({'usdt_address': usdt_address})
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    email = data.get('email')
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not all([email, username, password]):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    conn = get_db_connection()
+    
+    # Check if user already exists
+    existing_user = conn.execute(
+        'SELECT * FROM users WHERE email = ? OR username = ?', (email, username)
+    ).fetchone()
+    
+    if existing_user:
+        conn.close()
+        return jsonify({'error': 'User already exists'}), 400
+    
+    # Create new user
+    user_id = secrets.token_hex(16)
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    
+    conn.execute(
+        'INSERT INTO users (id, email, username, password_hash, verified) VALUES (?, ?, ?, ?, ?)',
+        (user_id, email, username, password_hash, True)  # Auto-verify for demo
+    )
+    
+    # Create wallet
+    wallet_id = secrets.token_hex(16)
+    conn.execute(
+        'INSERT INTO wallets (id, user_id) VALUES (?, ?)',
+        (wallet_id, user_id)
+    )
+    
+    conn.commit()
+    conn.close()
+    
+    token = create_token(user_id)
+    return jsonify({
+        'success': True,
+        'token': token,
+        'user': {
+            'id': user_id,
+            'email': email,
+            'username': username
+        }
+    })
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    
+    if not all([email, password]):
+        return jsonify({'error': 'Missing email or password'}), 400
+    
+    conn = get_db_connection()
+    user = conn.execute(
+        'SELECT * FROM users WHERE email = ?', (email,)
+    ).fetchone()
+    
+    if not user:
+        conn.close()
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    if user['password_hash'] != password_hash:
+        conn.close()
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    token = create_token(user['id'])
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'token': token,
+        'user': {
+            'id': user['id'],
+            'email': user['email'],
+            'username': user['username']
+        }
+    })
 
 @app.route('/api/payment/send', methods=['POST'])
 @require_auth
@@ -382,9 +497,65 @@ def send_money():
         'recipient': recipient_email
     })
 
+@app.route('/api/payment/charge', methods=['POST'])
+@require_auth
+def charge_wallet():
+    user_id = get_user_from_token(request.headers.get('Authorization', '').replace('Bearer ', ''))
+    data = request.get_json()
+    
+    amount = data.get('amount')
+    currency = data.get('currency')
+    payment_method = data.get('payment_method', 'card')
+    
+    if not all([amount, currency]):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    # Simulate payment processing
+    conn = get_db_connection()
+    
+    # Update wallet balance
+    wallet = conn.execute(
+        'SELECT * FROM wallets WHERE user_id = ?', (user_id,)
+    ).fetchone()
+    
+    balance_field = f"{currency.lower()}_balance"
+    
+    if wallet:
+        conn.execute(
+            f'UPDATE wallets SET {balance_field} = {balance_field} + ? WHERE user_id = ?',
+            (amount, user_id)
+        )
+    else:
+        wallet_id = secrets.token_hex(16)
+        conn.execute(
+            f'INSERT INTO wallets (id, user_id, {balance_field}) VALUES (?, ?, ?)',
+            (wallet_id, user_id, amount)
+        )
+    
+    # Record transaction
+    tx_id = secrets.token_hex(16)
+    conn.execute(
+        'INSERT INTO transactions (id, user_id, type, amount, currency, status, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        (tx_id, user_id, 'charge', amount, currency, 'completed', f'Wallet charge - {currency}', json.dumps({
+            'payment_method': payment_method
+        }))
+    )
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'success': True,
+        'transaction_id': tx_id,
+        'amount': amount,
+        'currency': currency
+    })
+
 # Add more routes as needed...
 
 if __name__ == '__main__':
-    print("Starting PayMe Wallet API...")
-    print("API will be available at: http://localhost:5000")
+    print("🚀 Starting PayMe Wallet API...")
+    print("📍 API will be available at: http://localhost:5000")
+    print("📊 Test services at: http://localhost:5000/api/test-services")
+    print("🔗 Test API at: http://localhost:5000/api/test")
     app.run(debug=True, host='0.0.0.0', port=5000)
