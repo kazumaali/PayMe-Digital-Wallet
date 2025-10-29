@@ -114,6 +114,22 @@ function getAuthToken() {
     return localStorage.getItem('authToken') || localStorage.getItem('currentUserToken');
 }
 
+// In updateUSDPricesDisplay function:
+function updateUSDPricesDisplay(rates) {
+    const usdPriceElement = document.getElementById('usdP');
+    if (usdPriceElement) {
+        const usdToIrr = rates.USD_IRR?.toLocaleString() || '1,070,000';
+        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '0.09'; // Updated calculation
+        
+        usdPriceElement.innerHTML = `
+            <strong>Current USD Prices (Live)</strong><br>
+            <small>1 USD = ${usdToIrr} IRR</small><br>
+            <small>100,000 IRR = $${irrToUsd} USD</small><br>
+            <small style="color: #666;">Updated: ${new Date(rates.timestamp).toLocaleTimeString()}</small>
+        `;
+    }
+}
+
 // If you want to keep the original function name for compatibility, you can do:
 // This ensures other parts of your code that call updateBalances() still work
 window.updateBalances = updateBalances;
