@@ -44,39 +44,6 @@ async function updateBalances() {
 // Get exchange rates for the chart and display
 async function loadExchangeRates() {
     try {
-        const response = await fetch(`${API_BASE}/exchange-rates`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const rates = await response.json();
-        
-// wallet.js - update the updateUSDPricesDisplay function
-function updateUSDPricesDisplay(rates) {
-    const usdPriceElement = document.getElementById('usdP');
-    if (usdPriceElement) {
-        const usdToIrr = rates.USD_IRR?.toLocaleString('en-US') || '1,070,000';
-        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '0.09';
-        
-        usdPriceElement.innerHTML = `
-            <strong>Current USD Prices (Live)</strong><br>
-            <small>1 USD = ${usdToIrr} IRR</small><br>
-            <small>100,000 IRR = $${irrToUsd} USD</small><br>
-            <small style="color: #666;">Updated: ${new Date(rates.timestamp).toLocaleTimeString()}</small>
-        `;
-        
-        console.log('💰 Exchange rates updated:', {
-            'USD_IRR': rates.USD_IRR,
-            'IRR_USD': rates.IRR_USD,
-            'timestamp': rates.timestamp
-        });
-    }
-}
-
-// Also update the loadExchangeRates function to log errors
-async function loadExchangeRates() {
-    try {
         console.log('🔄 Fetching exchange rates...');
         const response = await fetch(`${API_BASE}/exchange-rates`);
         
@@ -95,7 +62,8 @@ async function loadExchangeRates() {
         const fallbackRates = {
             USD_IRR: 1070000,
             IRR_USD: 0.000093,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            source: 'fallback'
         };
         updateUSDPricesDisplay(fallbackRates);
     }
@@ -105,15 +73,23 @@ async function loadExchangeRates() {
 function updateUSDPricesDisplay(rates) {
     const usdPriceElement = document.getElementById('usdP');
     if (usdPriceElement) {
-        const usdToIrr = rates.USD_IRR?.toLocaleString() || '42,000';
-        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '2.38'; // Show per 100,000 IRR
+        const usdToIrr = rates.USD_IRR?.toLocaleString('en-US') || '1,070,000';
+        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '0.09';
+        const source = rates.source || 'live';
         
         usdPriceElement.innerHTML = `
-            <strong>Current USD Prices (Live)</strong><br>
+            <strong>Current USD Prices (Live - ${source})</strong><br>
             <small>1 USD = ${usdToIrr} IRR</small><br>
             <small>100,000 IRR = $${irrToUsd} USD</small><br>
             <small style="color: #666;">Updated: ${new Date(rates.timestamp).toLocaleTimeString()}</small>
         `;
+        
+        console.log('💰 Exchange rates updated:', {
+            'USD_IRR': rates.USD_IRR,
+            'IRR_USD': rates.IRR_USD,
+            'timestamp': rates.timestamp,
+            'source': rates.source
+        });
     }
 }
 
@@ -141,22 +117,6 @@ function getAuthToken() {
     // In a real app, you'd get this from your authentication system
     // For now, we'll use a simple token from localStorage
     return localStorage.getItem('authToken') || localStorage.getItem('currentUserToken');
-}
-
-// In updateUSDPricesDisplay function:
-function updateUSDPricesDisplay(rates) {
-    const usdPriceElement = document.getElementById('usdP');
-    if (usdPriceElement) {
-        const usdToIrr = rates.USD_IRR?.toLocaleString() || '1,070,000';
-        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '0.09'; // Updated calculation
-        
-        usdPriceElement.innerHTML = `
-            <strong>Current USD Prices (Live)</strong><br>
-            <small>1 USD = ${usdToIrr} IRR</small><br>
-            <small>100,000 IRR = $${irrToUsd} USD</small><br>
-            <small style="color: #666;">Updated: ${new Date(rates.timestamp).toLocaleTimeString()}</small>
-        `;
-    }
 }
 
 // If you want to keep the original function name for compatibility, you can do:
