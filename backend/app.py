@@ -250,11 +250,11 @@ def get_exchange_rates():
         # Return fallback rates
         fallback_rates = {
             'USD_IRR': 1070000,
-            'IRR_USD': 0.000093,
+            'IRR_USD': 0.000000934579,
             'USD_USDT': 1.0,
             'USDT_USD': 1.0,
             'USDT_IRR': 1070000,
-            'IRR_USDT': 0.000093,
+            'IRR_USDT': 0.000000934579,
             'timestamp': datetime.utcnow().isoformat(),
             'note': 'Using fallback rates due to error',
             'source': 'fallback'
