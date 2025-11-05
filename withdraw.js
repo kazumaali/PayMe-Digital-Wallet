@@ -238,11 +238,18 @@ document.addEventListener('DOMContentLoaded', function() {
     loadUserData();
 });
 
-// در withdraw.js - اضافه کردن توابع جدید
 async function requestWithdrawalOTP() {
     const cardSelect = document.getElementById('cardSelect');
+    const amountInput = document.getElementById('amount');
+    const amount = parseFloat(amountInput.value);
+    
     if (cardSelect.value === '') {
         showMessage('لطفا یک کارت انتخاب کنید!', 'error');
+        return;
+    }
+    
+    if (!amount || amount <= 0) {
+        showMessage('لطفا مبلغ برداشت را وارد کنید!', 'error');
         return;
     }
     
@@ -250,12 +257,7 @@ async function requestWithdrawalOTP() {
     const filteredCards = userCards.filter(c => c.currency === selectedCurrency);
     const card = filteredCards[cardIndex];
     
-    if (!card.phone) {
-        showMessage('شماره موبایل برای این کارت ثبت نشده است!', 'error');
-        return;
-    }
-    
-    showMessage('درخواست رمز پویا ارسال شد...', 'success');
+    showMessage('در حال ارسال رمز پویا...', 'success');
     
     try {
         const response = await fetch('http://localhost:5000/api/payment/request-otp', {
@@ -265,20 +267,19 @@ async function requestWithdrawalOTP() {
                 'Authorization': `Bearer ${getAuthToken()}`
             },
             body: JSON.stringify({
-                phone_number: card.phone,
-                card_last4: card.last4,
-                type: 'withdrawal'
+                card_number: card.number,  // ✅ ارسال شماره کامل کارت
+                card_last4: card.last4     // ✅ ارسال 4 رقم آخر
             })
         });
 
         const data = await response.json();
         
         if (data.success) {
-            showMessage('رمز پویا به شماره موبایل شما ارسال شد.', 'success');
+            showMessage('✅ رمز پویا ارسال شد. لطفا پیامک خود را چک کنید.', 'success');
             document.getElementById('otpSection').style.display = 'block';
             document.getElementById('withdrawalOtp').focus();
         } else {
-            showMessage('خطا در ارسال رمز پویا: ' + data.error, 'error');
+            showMessage('❌ ' + data.error, 'error');
         }
     } catch (error) {
         console.error('Error requesting OTP:', error);
@@ -292,6 +293,11 @@ async function processWithdrawal() {
     const otpInput = document.getElementById('withdrawalOtp');
     const amount = parseFloat(amountInput.value);
     const otp = otpInput.value;
+    
+    if (!amount || amount <= 0) {
+        showMessage('لطفا مبلغ برداشت را وارد کنید!', 'error');
+        return;
+    }
     
     if (!otp) {
         showMessage('لطفا رمز پویا را وارد کنید!', 'error');
@@ -315,26 +321,53 @@ async function processWithdrawal() {
                 amount: amount,
                 currency: selectedCurrency,
                 otp_code: otp,
-                phone_number: card.phone,
-                card_last4: card.last4
+                card_number: card.number  // ✅ ارسال شماره کارت
             })
         });
 
         const data = await response.json();
         
         if (data.success) {
-            showMessage(`برداشت موفق! مبلغ ${amount.toLocaleString()} از حساب شما کسر شد.`, 'success');
+            showMessage(`✅ برداشت موفق! مبلغ ${amount.toLocaleString()} ${selectedCurrency} از حساب شما کسر شد.`, 'success');
             
             // به‌روزرسانی موجودی
-            loadUserData();
+            await updateBalancesFromBackend();
             document.getElementById('otpSection').style.display = 'none';
             otpInput.value = '';
+            amountInput.value = '';
+            
+            // به‌روزرسانی موجودی نمایش داده شده
+            updateWithdrawalInfo();
             
         } else {
-            showMessage('خطا در برداشت: ' + data.error, 'error');
+            showMessage('❌ خطا در برداشت: ' + data.error, 'error');
         }
     } catch (error) {
         console.error('Error processing withdrawal:', error);
         showMessage('خطا در ارتباط با سرور', 'error');
+    }
+}
+
+async function updateBalancesFromBackend() {
+    try {
+        const response = await fetch(`${API_BASE}/wallet/balance`, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const balances = await response.json();
+            currentBalance.USD = balances.USD || 0;
+            currentBalance.IRR = balances.IRR || 0;
+            
+            // به‌روزرسانی localStorage
+            const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+            currentUser.balances = balances;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        }
+    } catch (error) {
+        console.error('Error updating balances from backend:', error);
     }
 }
