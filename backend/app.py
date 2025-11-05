@@ -752,6 +752,61 @@ def process_withdrawal():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+        
+# در app.py - اضافه کردن endpoint جدید
+
+@app.route('/api/wallet/withdraw/check-balance', methods=['POST'])
+@require_auth
+def check_withdrawal_balance():
+    """بررسی موجودی برای برداشت"""
+    user_id = get_user_from_token(request.headers.get('Authorization', '').replace('Bearer ', ''))
+    data = request.get_json()
+    
+    amount = data.get('amount')
+    currency = data.get('currency')
+    
+    if not all([amount, currency]):
+        return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+    
+    conn = get_db_connection()
+    wallet = conn.execute(
+        'SELECT * FROM wallets WHERE user_id = ?', (user_id,)
+    ).fetchone()
+    
+    if not wallet:
+        return jsonify({'success': False, 'error': 'Wallet not found'}), 404
+    
+    balance_field = f"{currency.lower()}_balance"
+    current_balance = wallet[balance_field] or 0.0
+    
+    conn.close()
+    
+    if current_balance < amount:
+        return jsonify({
+            'success': False, 
+            'error': 'موجودی کافی نیست',
+            'current_balance': current_balance,
+            'requested_amount': amount
+        })
+    
+    # محاسبه کارمزد
+    fee_percentage = 0.01  # 1%
+    fee = amount * fee_percentage
+    
+    if currency == 'USD':
+        fee = max(fee, 1.0)  # حداقل 1 دلار
+    else:  # IRR
+        fee = max(fee, 50000)  # حداقل 50,000 ریال
+    
+    net_amount = amount - fee
+    
+    return jsonify({
+        'success': True,
+        'current_balance': current_balance,
+        'fee': fee,
+        'net_amount': net_amount,
+        'currency': currency
+    })
 
 if __name__ == '__main__':
     print("🚀 Starting PayMe Wallet API...")
