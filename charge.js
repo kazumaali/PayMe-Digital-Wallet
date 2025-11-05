@@ -281,15 +281,9 @@ function resetIRRForm() {
     selectedCard = null;
 }
 
-// در charge.js - آپدیت تابع requestDynamicCode
 async function requestDynamicCode() {
     if (!selectedCard) {
         showMessage('لطفا ابتدا یک کارت انتخاب کنید!', 'red');
-        return;
-    }
-
-    if (!selectedCard.phone) {
-        showMessage('شماره موبایل برای این کارت ثبت نشده است!', 'red');
         return;
     }
 
@@ -303,8 +297,8 @@ async function requestDynamicCode() {
                 'Authorization': `Bearer ${getAuthToken()}`
             },
             body: JSON.stringify({
-                phone_number: selectedCard.phone,
-                card_last4: selectedCard.last4
+                card_number: selectedCard.number, // ارسال شماره کامل کارت
+                card_last4: selectedCard.last4   // ارسال 4 رقم آخر
             })
         });
 
@@ -320,6 +314,47 @@ async function requestDynamicCode() {
     } catch (error) {
         console.error('Error:', error);
         showMessage('خطا در ارتباط با سرور', 'red');
+    }
+}
+
+async function requestWithdrawalOTP() {
+    const cardSelect = document.getElementById('cardSelect');
+    if (cardSelect.value === '') {
+        showMessage('لطفا یک کارت انتخاب کنید!', 'error');
+        return;
+    }
+    
+    const cardIndex = parseInt(cardSelect.value);
+    const filteredCards = userCards.filter(c => c.currency === selectedCurrency);
+    const card = filteredCards[cardIndex];
+    
+    showMessage('درخواست رمز پویا ارسال شد...', 'success');
+    
+    try {
+        const response = await fetch('http://localhost:5000/api/payment/request-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                card_number: card.number,  // فقط شماره کارت
+                card_last4: card.last4     // فقط 4 رقم آخر
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showMessage('رمز پویا به شماره موبایل مرتبط با کارت شما ارسال شد.', 'success');
+            document.getElementById('otpSection').style.display = 'block';
+            document.getElementById('withdrawalOtp').focus();
+        } else {
+            showMessage('خطا در ارسال رمز پویا: ' + data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error requesting OTP:', error);
+        showMessage('خطا در ارتباط با سرور', 'error');
     }
 }
 
@@ -351,7 +386,6 @@ function processUSDPayment() {
     }, 2000);
 }
 
-// آپدیت تابع processIRRPayment
 async function processIRRPayment() {
     const amount = parseFloat(document.getElementById('amount').value);
     const dynamicCode = document.getElementById('irrDynamicCode').value;
@@ -369,6 +403,9 @@ async function processIRRPayment() {
     showMessage('در حال پردازش پرداخت...', 'blue');
     
     try {
+        // اگر کارت انتخاب شده، از شماره کارت استفاده کن
+        const cardNumber = selectedCard ? selectedCard.number : document.getElementById('irrCardNumber').value;
+        
         const response = await fetch('http://localhost:5000/api/payment/process-irr', {
             method: 'POST',
             headers: {
@@ -378,7 +415,7 @@ async function processIRRPayment() {
             body: JSON.stringify({
                 amount: amount,
                 otp_code: dynamicCode,
-                phone_number: selectedCard ? selectedCard.phone : null,
+                card_number: cardNumber,  // ✅ ارسال شماره کارت به جای phone
                 card_data: selectedCard ? null : {
                     number: document.getElementById('irrCardNumber').value,
                     expiry: document.getElementById('irrExpiryDate').value,
@@ -391,7 +428,8 @@ async function processIRRPayment() {
         const data = await response.json();
         
         if (data.success) {
-            updateBalance('IRR', amount);
+            // به‌روزرسانی موجودی از backend
+            await updateBalancesFromBackend();
             showMessage(`پرداخت موفق! مبلغ ${amount.toLocaleString()} ﷼ به کیف پول شما اضافه شد!`, 'green');
             
             setTimeout(() => {
@@ -403,6 +441,27 @@ async function processIRRPayment() {
     } catch (error) {
         console.error('Error processing payment:', error);
         showMessage('خطا در ارتباط با سرور', 'red');
+    }
+}
+
+async function updateBalancesFromBackend() {
+    try {
+        const response = await fetch(`${API_BASE}/wallet/balance`, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const balances = await response.json();
+            // به‌روزرسانی localStorage با داده‌های backend
+            const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+            currentUser.balances = balances;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        }
+    } catch (error) {
+        console.error('Error updating balances from backend:', error);
     }
 }
 

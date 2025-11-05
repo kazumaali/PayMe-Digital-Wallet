@@ -61,7 +61,7 @@ async function loadExchangeRates() {
         // Fallback to static rates
         const fallbackRates = {
             USD_IRR: 1070000,
-            IRR_USD: 0.000000934579,
+            IRR_USD: 0.000093,
             timestamp: new Date().toISOString(),
             source: 'fallback'
         };
@@ -74,7 +74,7 @@ function updateUSDPricesDisplay(rates) {
     const usdPriceElement = document.getElementById('usdP');
     if (usdPriceElement) {
         const usdToIrr = rates.USD_IRR?.toLocaleString('en-US') || '1,070,000';
-        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(7) || '0.09';
+        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '0.09';
         const source = rates.source || 'live';
         
         usdPriceElement.innerHTML = `
@@ -99,18 +99,25 @@ function startLiveRatesUpdates() {
     setInterval(loadExchangeRates, 5 * 60 * 1000);
 }
 
-// Fallback to localStorage if backend is down
+// در wallet.js - آپدیت تابع fallback
 function fallbackToLocalStorage() {
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const balances = currentUser.balances || {
-        USD: 0,
-        USDT: 0,
-        IRR: 0
-    };
-    
-    document.getElementById('p1').textContent = `USD: $${balances.USD.toFixed(2)}`;
-    document.getElementById('p2').textContent = `USDT: ${balances.USDT.toFixed(2)}`;
-    document.getElementById('p3').textContent = `IRR: ${balances.IRR.toLocaleString()} ﷼`;
+    try {
+        const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+        const balances = currentUser.balances || { USD: 0, USDT: 0, IRR: 0 };
+        
+        // استفاده از مقادیر پیش‌فرض منطبق با backend
+        document.getElementById('p1').textContent = `USD: $${(balances.USD || 0).toFixed(2)}`;
+        document.getElementById('p2').textContent = `USDT: ${(balances.USDT || 0).toFixed(2)}`;
+        document.getElementById('p3').textContent = `IRR: ${(balances.IRR || 0).toLocaleString()} ﷼`;
+        
+        console.log('⚠️ Using localStorage fallback balances');
+    } catch (error) {
+        console.error('Fallback also failed:', error);
+        // مقادیر کاملاً پیش‌فرض
+        document.getElementById('p1').textContent = 'USD: $0.00';
+        document.getElementById('p2').textContent = 'USDT: 0.00';
+        document.getElementById('p3').textContent = 'IRR: 0 ﷼';
+    }
 }
 
 function getAuthToken() {
