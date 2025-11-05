@@ -18,8 +18,8 @@ function loadUserData() {
     currentBalance.USD = userData.balanceUSD || 0;
     currentBalance.IRR = userData.balanceIRR || 0;
     
-    // Load user cards
-    userCards = userData.cards || [];
+    // Load user cards from localStorage (shared with charge.html)
+    userCards = JSON.parse(localStorage.getItem('userCards')) || [];
     
     updateWithdrawalInfo();
 }
@@ -64,11 +64,12 @@ function updateCardsDropdown() {
     cardSelect.style.display = 'block';
     noCardsMessage.style.display = 'none';
     
-    // Add cards to dropdown
+    // Add cards to dropdown with names if available
     filteredCards.forEach((card, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = `${card.type} - ****${card.number.slice(-4)}`;
+        const cardName = card.name ? ` - ${card.name}` : '';
+        option.textContent = `${card.type} - ****${card.number.slice(-4)}${cardName}`;
         cardSelect.appendChild(option);
     });
     
@@ -92,10 +93,12 @@ function showCardPreview() {
     }
     
     const cardIndex = parseInt(cardSelect.value);
-    const card = userCards.filter(c => c.currency === selectedCurrency)[cardIndex];
+    const filteredCards = userCards.filter(c => c.currency === selectedCurrency);
+    const card = filteredCards[cardIndex];
     
     if (card) {
-        previewCardType.textContent = card.type || 'Credit Card';
+        const cardName = card.name ? ` - ${card.name}` : '';
+        previewCardType.textContent = (card.type || 'Credit Card') + cardName;
         previewCardNumber.textContent = `**** **** **** ${card.number.slice(-4)}`;
         previewCardBank.textContent = card.bank || 'Bank';
         cardPreview.style.display = 'block';
@@ -234,3 +237,104 @@ function showMessage(text, type) {
 document.addEventListener('DOMContentLoaded', function() {
     loadUserData();
 });
+
+// در withdraw.js - اضافه کردن توابع جدید
+async function requestWithdrawalOTP() {
+    const cardSelect = document.getElementById('cardSelect');
+    if (cardSelect.value === '') {
+        showMessage('لطفا یک کارت انتخاب کنید!', 'error');
+        return;
+    }
+    
+    const cardIndex = parseInt(cardSelect.value);
+    const filteredCards = userCards.filter(c => c.currency === selectedCurrency);
+    const card = filteredCards[cardIndex];
+    
+    if (!card.phone) {
+        showMessage('شماره موبایل برای این کارت ثبت نشده است!', 'error');
+        return;
+    }
+    
+    showMessage('درخواست رمز پویا ارسال شد...', 'success');
+    
+    try {
+        const response = await fetch('http://localhost:5000/api/payment/request-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                phone_number: card.phone,
+                card_last4: card.last4,
+                type: 'withdrawal'
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showMessage('رمز پویا به شماره موبایل شما ارسال شد.', 'success');
+            document.getElementById('otpSection').style.display = 'block';
+            document.getElementById('withdrawalOtp').focus();
+        } else {
+            showMessage('خطا در ارسال رمز پویا: ' + data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error requesting OTP:', error);
+        showMessage('خطا در ارتباط با سرور', 'error');
+    }
+}
+
+async function processWithdrawal() {
+    const amountInput = document.getElementById('amount');
+    const cardSelect = document.getElementById('cardSelect');
+    const otpInput = document.getElementById('withdrawalOtp');
+    const amount = parseFloat(amountInput.value);
+    const otp = otpInput.value;
+    
+    if (!otp) {
+        showMessage('لطفا رمز پویا را وارد کنید!', 'error');
+        return;
+    }
+    
+    const cardIndex = parseInt(cardSelect.value);
+    const filteredCards = userCards.filter(c => c.currency === selectedCurrency);
+    const card = filteredCards[cardIndex];
+    
+    showMessage('در حال پردازش درخواست برداشت...', 'success');
+    
+    try {
+        const response = await fetch('http://localhost:5000/api/payment/withdraw', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                amount: amount,
+                currency: selectedCurrency,
+                otp_code: otp,
+                phone_number: card.phone,
+                card_last4: card.last4
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showMessage(`برداشت موفق! مبلغ ${amount.toLocaleString()} از حساب شما کسر شد.`, 'success');
+            
+            // به‌روزرسانی موجودی
+            loadUserData();
+            document.getElementById('otpSection').style.display = 'none';
+            otpInput.value = '';
+            
+        } else {
+            showMessage('خطا در برداشت: ' + data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error processing withdrawal:', error);
+        showMessage('خطا در ارتباط با سرور', 'error');
+    }
+}

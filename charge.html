@@ -25,17 +25,28 @@
             <button onclick="showAddCardForm()" style="margin-top: 10px; background: #28a745;">Add New Card</button>
         </div>
         
+        <!-- Add this section after the card selection dropdown in charge.html -->
+        <div id="savedCardsSection" style="display: none; margin-top: 20px;">
+            <h4>Your Saved Cards</h4>
+            <div id="savedCardsList"></div>
+        </div>
+        
         <div id="amountSection" style="display: none; margin-top: 20px;">
             <label for="amount">Enter amount:</label>
             <input type="number" id="amount" class="amount-input" placeholder="0.00" min="0" step="0.01">
         </div>
     </section>
-    
-    <!-- Add Card Form -->
+
+<!-- Update the Add Card Form section to include card name -->
     <section id="addCardForm" class="payment-section" style="display: none;">
         <h3>Add New Card</h3>
         <div class="payment-form">
+            <input type="text" id="cardName" placeholder="Card Name (Optional)">
             <input type="text" id="newCardNumber" placeholder="Card Number (1234 5678 9012 3456)" maxlength="19">
+             <div id="irrPhoneField" style="display: none;">
+                 <input type="text" id="cardPhone" placeholder="شماره موبایل (09xxxxxxxxx)" maxlength="11">
+                 
+             </div>
             <div id="usdCardFields" style="display: none;">
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="newExpiryDate" placeholder="MM/YY" maxlength="5">

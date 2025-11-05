@@ -61,7 +61,7 @@ async function loadExchangeRates() {
         // Fallback to static rates
         const fallbackRates = {
             USD_IRR: 1070000,
-            IRR_USD: 0.000000934579,
+            IRR_USD: 0.000093,
             timestamp: new Date().toISOString(),
             source: 'fallback'
         };
@@ -74,7 +74,7 @@ function updateUSDPricesDisplay(rates) {
     const usdPriceElement = document.getElementById('usdP');
     if (usdPriceElement) {
         const usdToIrr = rates.USD_IRR?.toLocaleString('en-US') || '1,070,000';
-        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '0.0934579';
+        const irrToUsd = (rates.IRR_USD * 100000)?.toFixed(2) || '0.09';
         const source = rates.source || 'live';
         
         usdPriceElement.innerHTML = `

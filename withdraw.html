@@ -55,10 +55,22 @@
                 <small>The actual amount received will be after deducting the withdrawal fee.</small>
             </div>
             
-            <button class="withdraw-button" id="withdrawBtn" onclick="processWithdrawal()" disabled>Withdraw Funds</button>
+            <!-- آپدیت دکمه برداشت -->
+            <button class="withdraw-button" id="withdrawBtn" onclick="requestWithdrawalOTP()">درخواست برداشت</button>
         </div>
         
         <div id="message" style="margin-top: 15px; padding: 12px; border-radius: 8px; display: none;"></div>
+    </div>
+    
+    <!-- در withdraw.html - اضافه کردن بخش رمز پویا -->
+    <div id="otpSection" style="display: none; margin-top: 15px;">
+        <div class="form-group">
+            <label for="withdrawalOtp">رمز پویا:</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="withdrawalOtp" placeholder="رمز پویا (۶ رقمی)" maxlength="6" style="flex: 1;">
+                <button onclick="requestWithdrawalOTP()" class="otp-button">ارسال مجدد رمز</button>
+            </div>
+        </div>
     </div>
 
     <script src="withdraw.js"></script>
