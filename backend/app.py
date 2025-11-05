@@ -548,23 +548,24 @@ def charge_wallet():
         'currency': currency
     })
     
+# در app.py - آپدیت routeهای OTP
 @app.route('/api/payment/request-otp', methods=['POST'])
 @require_auth
 def request_otp():
-    """درخواست ارسال رمز پویا"""
+    """درخواست ارسال رمز پویا بر اساس کارت"""
     try:
         data = request.get_json()
-        phone_number = data.get('phone_number')
+        card_number = data.get('card_number')
         card_last4 = data.get('card_last4')
         
-        if not all([phone_number, card_last4]):
+        if not all([card_number, card_last4]):
             return jsonify({
                 'success': False, 
-                'error': 'لطفا شماره موبایل و ۴ رقم آخر کارت را وارد کنید'
+                'error': 'لطفا اطلاعات کارت را وارد کنید'
             }), 400
         
-        # ارسال OTP
-        success, message = sms_service.send_otp(phone_number, card_last4)
+        # ارسال OTP - فقط بر اساس شماره کارت
+        success, message = sms_service.send_otp(card_number, card_last4)
         
         if success:
             return jsonify({
@@ -587,20 +588,20 @@ def request_otp():
 @app.route('/api/payment/verify-otp', methods=['POST'])
 @require_auth
 def verify_otp():
-    """بررسی رمز پویا"""
+    """بررسی رمز پویا بر اساس کارت"""
     try:
         data = request.get_json()
-        phone_number = data.get('phone_number')
+        card_number = data.get('card_number')
         otp_code = data.get('otp_code')
         
-        if not all([phone_number, otp_code]):
+        if not all([card_number, otp_code]):
             return jsonify({
                 'success': False, 
-                'error': 'لطفا شماره موبایل و رمز پویا را وارد کنید'
+                'error': 'لطفا اطلاعات کارت و رمز پویا را وارد کنید'
             }), 400
         
         # بررسی OTP
-        is_valid, message = sms_service.verify_otp(phone_number, otp_code)
+        is_valid, message = sms_service.verify_otp(card_number, otp_code)
         
         if is_valid:
             return jsonify({
@@ -759,86 +760,3 @@ if __name__ == '__main__':
     print("🔗 Test API at: http://localhost:5000/api/test")
     print("💱 Test exchange rates at: http://localhost:5000/api/exchange-rates")
     app.run(debug=True, host='0.0.0.0', port=5000)
-    
-    
-# در app.py - اضافه کردن routeهای جدید
-@app.route('/api/payment/request-otp', methods=['POST'])
-@require_auth
-def request_otp():
-    data = request.get_json()
-    phone_number = data.get('phone_number')
-    card_last4 = data.get('card_last4')
-    
-    if not all([phone_number, card_last4]):
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    # ارسال رمز پویا
-    success = sms_service.send_otp(phone_number, card_last4)
-    
-    if success:
-        return jsonify({'success': True, 'message': 'OTP sent successfully'})
-    else:
-        return jsonify({'success': False, 'error': 'Failed to send OTP'})
-
-@app.route('/api/payment/process-irr', methods=['POST'])
-@require_auth
-def process_irr_payment():
-    user_id = get_user_from_token(request.headers.get('Authorization', '').replace('Bearer ', ''))
-    data = request.get_json()
-    
-    amount = data.get('amount')
-    otp_code = data.get('otp_code')
-    phone_number = data.get('phone_number')
-    card_data = data.get('card_data')
-    
-    if not all([amount, otp_code]):
-        return jsonify({'error': 'Missing required fields'}), 400
-    
-    # بررسی رمز پویا
-    if not sms_service.verify_otp(phone_number, otp_code):
-        return jsonify({'success': False, 'error': 'رمز پویا نامعتبر یا منقضی شده است'})
-    
-    # پردازش پرداخت
-    try:
-        conn = get_db_connection()
-        
-        # افزایش موجودی
-        wallet = conn.execute(
-            'SELECT * FROM wallets WHERE user_id = ?', (user_id,)
-        ).fetchone()
-        
-        if wallet:
-            conn.execute(
-                'UPDATE wallets SET irr_balance = irr_balance + ? WHERE user_id = ?',
-                (amount, user_id)
-            )
-        else:
-            wallet_id = secrets.token_hex(16)
-            conn.execute(
-                'INSERT INTO wallets (id, user_id, irr_balance) VALUES (?, ?, ?)',
-                (wallet_id, user_id, amount)
-            )
-        
-        # ثبت تراکنش
-        tx_id = secrets.token_hex(16)
-        conn.execute(
-            'INSERT INTO transactions (id, user_id, type, amount, currency, status, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            (tx_id, user_id, 'charge', amount, 'IRR', 'completed', 'شارژ کیف پول - ریال', json.dumps({
-                'payment_method': 'iranian_card',
-                'otp_verified': True,
-                'phone_number': phone_number
-            }))
-        )
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'transaction_id': tx_id,
-            'amount': amount,
-            'currency': 'IRR'
-        })
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
