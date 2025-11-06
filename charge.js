@@ -69,16 +69,71 @@ function hideAllPaymentSections() {
     addCardForm.style.display = 'none';
 }
 
+// Update the updateCardsDropdown function
 function updateCardsDropdown() {
     cardsSelect.innerHTML = '<option value="">-- Please choose --</option>';
     userCards.forEach((card, index) => {
         const option = document.createElement('option');
         option.value = index;
-        option.textContent = `${card.type} - ****${card.last4} (${card.currency})`;
+        const cardName = card.name ? ` (${card.name})` : '';
+        option.textContent = `${card.type} - ****${card.last4}${cardName} (${card.currency})`;
         cardsSelect.appendChild(option);
+    });
+    
+    // Update saved cards list
+    updateSavedCardsList();
+}
+
+// Add new function to display saved cards with delete option
+function updateSavedCardsList() {
+    const savedCardsList = document.getElementById('savedCardsList');
+    const savedCardsSection = document.getElementById('savedCardsSection');
+    
+    if (userCards.length === 0) {
+        savedCardsSection.style.display = 'none';
+        return;
+    }
+    
+    savedCardsSection.style.display = 'block';
+    savedCardsList.innerHTML = '';
+    
+    userCards.forEach((card, index) => {
+        const cardElement = document.createElement('div');
+        cardElement.className = 'saved-card';
+        cardElement.style.cssText = `
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        `;
+        
+        const cardName = card.name ? ` (${card.name})` : '';
+        cardElement.innerHTML = `
+            <div>
+                <strong>${card.type} - ****${card.last4}${cardName}</strong>
+                <br>
+                <small>Currency: ${card.currency}</small>
+            </div>
+            <button onclick="deleteCard(${index})" style="
+                background: #dc3545;
+                color: white;
+                border: none;
+                padding: 6px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+            ">Delete</button>
+        `;
+        
+        savedCardsList.appendChild(cardElement);
     });
 }
 
+// Update showAddCardForm to clear card name field
 function showAddCardForm() {
     const currency = currencySelect.value;
     if (!currency) {
@@ -98,21 +153,33 @@ function showAddCardForm() {
     }
     
     // Clear form
+    document.getElementById('cardName').value = '';
     document.getElementById('newCardNumber').value = '';
     document.getElementById('newExpiryDate').value = '';
     document.getElementById('newCvv').value = '';
     document.getElementById('newCardHolder').value = '';
     document.getElementById('newExpiryDateIRR').value = '';
     document.getElementById('newCvv2').value = '';
+    
+    document.getElementById('cardPhone').value = '';
 }
 
 function hideAddCardForm() {
     addCardForm.style.display = 'none';
 }
 
+// Update addNewCard function to include card name
 function addNewCard() {
     const currency = currencySelect.value;
     const cardNumber = document.getElementById('newCardNumber').value.replace(/\s/g, '');
+    const cardName = document.getElementById('cardName').value.trim();
+    let phoneNumber = '';
+    if (currency === 'IRR') {
+        if (!phoneNumber || phoneNumber.length !== 11 || !phoneNumber.startsWith('09')) {
+            showMessage('لطفا شماره موبایل صحیح را وارد کنید', 'red');
+            return;
+        }
+    }
 
     // Validation
     if (!cardNumber || cardNumber.length < 16) {
@@ -133,13 +200,15 @@ function addNewCard() {
         }
 
         newCard = {
+            name: cardName,
             type: 'Visa/MasterCard',
             last4: cardNumber.slice(-4),
             number: cardNumber,
             expiry: expiryDate,
             cvv: cvv,
             holder: cardHolder,
-            currency: currency
+            currency: currency,
+            bank: 'International Bank'
         };
     } else if (currency === 'IRR') {
         const expiryDate = document.getElementById('newExpiryDateIRR').value;
@@ -151,12 +220,15 @@ function addNewCard() {
         }
 
         newCard = {
+            name: cardName,
             type: 'Iranian Bank Card',
             last4: cardNumber.slice(-4),
             number: cardNumber,
             expiry: expiryDate,
             cvv2: cvv2,
-            currency: currency
+            currency: currency,
+            bank: 'Iranian Bank',
+            phone: phoneNumber
         };
     }
     
@@ -165,6 +237,16 @@ function addNewCard() {
     updateCardsDropdown();
     hideAddCardForm();
     showMessage('New card added successfully!', 'green');
+}
+
+// Add delete card function
+function deleteCard(index) {
+    if (confirm('Are you sure you want to delete this card?')) {
+        userCards.splice(index, 1);
+        localStorage.setItem('userCards', JSON.stringify(userCards));
+        updateCardsDropdown();
+        showMessage('Card deleted successfully!', 'green');
+    }
 }
 
 function showSavedIRRCard() {
@@ -199,17 +281,81 @@ function resetIRRForm() {
     selectedCard = null;
 }
 
-function requestDynamicCode() {
-    // Simulate requesting dynamic code from bank
-    showMessage('درخواست رمز پویا ارسال شد. لطفا منتظر پیامک باشید...', 'blue');
+async function requestDynamicCode() {
+    if (!selectedCard) {
+        showMessage('لطفا ابتدا یک کارت انتخاب کنید!', 'red');
+        return;
+    }
+
+    showMessage('در حال ارسال رمز پویا...', 'blue');
     
-    // Simulate receiving dynamic code after 3 seconds
-    setTimeout(() => {
-        // Generate a random 6-digit code
-        const dynamicCode = Math.floor(100000 + Math.random() * 900000).toString();
-        document.getElementById('irrDynamicCode').value = dynamicCode;
-        showMessage(`رمز پویا دریافت شد: ${dynamicCode}`, 'green');
-    }, 3000);
+    try {
+        const response = await fetch('http://localhost:5000/api/payment/request-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                card_number: selectedCard.number, // ارسال شماره کامل کارت
+                card_last4: selectedCard.last4   // ارسال 4 رقم آخر
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showMessage('✅ رمز پویا ارسال شد. لطفا پیامک خود را چک کنید.', 'green');
+            document.getElementById('irrDynamicCode').disabled = false;
+            document.getElementById('irrDynamicCode').focus();
+        } else {
+            showMessage('❌ ' + data.error, 'red');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showMessage('خطا در ارتباط با سرور', 'red');
+    }
+}
+
+async function requestWithdrawalOTP() {
+    const cardSelect = document.getElementById('cardSelect');
+    if (cardSelect.value === '') {
+        showMessage('لطفا یک کارت انتخاب کنید!', 'error');
+        return;
+    }
+    
+    const cardIndex = parseInt(cardSelect.value);
+    const filteredCards = userCards.filter(c => c.currency === selectedCurrency);
+    const card = filteredCards[cardIndex];
+    
+    showMessage('درخواست رمز پویا ارسال شد...', 'success');
+    
+    try {
+        const response = await fetch('http://localhost:5000/api/payment/request-otp', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                card_number: card.number,  // فقط شماره کارت
+                card_last4: card.last4     // فقط 4 رقم آخر
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showMessage('رمز پویا به شماره موبایل مرتبط با کارت شما ارسال شد.', 'success');
+            document.getElementById('otpSection').style.display = 'block';
+            document.getElementById('withdrawalOtp').focus();
+        } else {
+            showMessage('خطا در ارسال رمز پویا: ' + data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error requesting OTP:', error);
+        showMessage('خطا در ارتباط با سرور', 'error');
+    }
 }
 
 function processUSDPayment() {
@@ -240,7 +386,7 @@ function processUSDPayment() {
     }, 2000);
 }
 
-function processIRRPayment() {
+async function processIRRPayment() {
     const amount = parseFloat(document.getElementById('amount').value);
     const dynamicCode = document.getElementById('irrDynamicCode').value;
     
@@ -250,35 +396,73 @@ function processIRRPayment() {
     }
     
     if (!dynamicCode) {
-        showMessage('Please enter رمز پویا!', 'red');
+        showMessage('لطفا رمز پویا را وارد کنید!', 'red');
         return;
     }
     
-    // For saved cards, we already have the card details
-    // For new cards, validate the card fields
-    if (!selectedCard) {
-        const cvv2 = document.getElementById('irrCvv2').value;
-        const expiryDate = document.getElementById('irrExpiryDate').value;
-        const cardNumber = document.getElementById('irrCardNumber').value;
-        
-        if (!cvv2 || !expiryDate || !cardNumber) {
-            showMessage('Please fill all card details!', 'red');
-            return;
-        }
-    }
-
-    // Simulate payment processing
-    showMessage('Processing IRR payment...', 'blue');
+    showMessage('در حال پردازش پرداخت...', 'blue');
     
-    setTimeout(() => {
-        updateBalance('IRR', amount);
-        showMessage(`Successfully charged ${amount.toLocaleString()} ﷼ to your wallet!`, 'green');
+    try {
+        // اگر کارت انتخاب شده، از شماره کارت استفاده کن
+        const cardNumber = selectedCard ? selectedCard.number : document.getElementById('irrCardNumber').value;
         
-        // Redirect to wallet after success
-        setTimeout(() => {
-            window.location.href = 'wallet.html';
-        }, 2000);
-    }, 2000);
+        const response = await fetch('http://localhost:5000/api/payment/process-irr', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                amount: amount,
+                otp_code: dynamicCode,
+                card_number: cardNumber,  // ✅ ارسال شماره کارت به جای phone
+                card_data: selectedCard ? null : {
+                    number: document.getElementById('irrCardNumber').value,
+                    expiry: document.getElementById('irrExpiryDate').value,
+                    cvv2: document.getElementById('irrCvv2').value,
+                    bank: document.getElementById('irrBank').value
+                }
+            })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            // به‌روزرسانی موجودی از backend
+            await updateBalancesFromBackend();
+            showMessage(`پرداخت موفق! مبلغ ${amount.toLocaleString()} ﷼ به کیف پول شما اضافه شد!`, 'green');
+            
+            setTimeout(() => {
+                window.location.href = 'wallet.html';
+            }, 2000);
+        } else {
+            showMessage('خطا در پرداخت: ' + data.error, 'red');
+        }
+    } catch (error) {
+        console.error('Error processing payment:', error);
+        showMessage('خطا در ارتباط با سرور', 'red');
+    }
+}
+
+async function updateBalancesFromBackend() {
+    try {
+        const response = await fetch(`${API_BASE}/wallet/balance`, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const balances = await response.json();
+            // به‌روزرسانی localStorage با داده‌های backend
+            const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+            currentUser.balances = balances;
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        }
+    } catch (error) {
+        console.error('Error updating balances from backend:', error);
+    }
 }
 
 function generateUSDTAddress() {

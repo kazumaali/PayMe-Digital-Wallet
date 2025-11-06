@@ -195,3 +195,19 @@ body {
     width: auto !important;
     margin: 0 !important;
 }
+
+/* Add to payme4.css */
+.saved-card {
+    transition: all 0.3s ease;
+}
+
+.saved-card:hover {
+    background: #e9ecef !important;
+    transform: translateY(-1px);
+}
+
+#savedCardsSection h4 {
+    color: var(--text);
+    margin-bottom: 12px;
+    font-weight: 600;
+}

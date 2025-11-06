@@ -4,12 +4,14 @@ import sqlite3
 import json
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 import os
 import sys
 import re
+sys.path.append(os.path.join(os.path.dirname(__file__), 'services'))
+from sms_service import sms_service
 
 # Add the current directory to Python path to import services
 sys.path.append(os.path.dirname(__file__))
@@ -25,8 +27,8 @@ try:
     from services.payment_service import PaymentService
     print("✅ Successfully imported all services")
     
-    # Initialize services
-    exchange_service = ExchangeService()
+    # Initialize services with your Navasan API key
+    exchange_service = ExchangeService(navasan_api_key='freeVeBEP365HYZw58h3bdFVxui8EQXC')
     wallet_service = WalletService()
     payment_service = PaymentService()
     
@@ -34,14 +36,16 @@ except ImportError as e:
     print(f"❌ Import error: {e}")
     print("⚠️  Running with built-in exchange service only")
     
-    # Fallback: Use the built-in exchange service
+    # Fallback: Use the built-in exchange service with your API key
     class ExchangeService:
-        def __init__(self):
+        def __init__(self, navasan_api_key='freeVeBEP365HYZw58h3bdFVxui8EQXC'):
             self.cache = {}
-            self.cache_timeout = 300  # 5 minutes
+            self.cache_timeout = 300
+            self.navasan_api_key = navasan_api_key
+            self.navasan_base_url = 'https://api.navasan.tech/v1/'
         
         def get_current_rates(self):
-            """Get current exchange rates from tgju.org with improved scraping"""
+            """Get current exchange rates from Navasan API"""
             cache_key = 'exchange_rates'
             if cache_key in self.cache:
                 cached_data, timestamp = self.cache[cache_key]
@@ -49,218 +53,65 @@ except ImportError as e:
                     return cached_data
             
             try:
-                print("🌐 Fetching live exchange rates from tgju.org...")
+                print("🌐 Fetching live exchange rates from Navasan API...")
                 
+                # Try Navasan API
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none',
-                    'Cache-Control': 'max-age=0'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json',
                 }
                 
-                # Try multiple URLs and methods
-                usd_to_irr = self.try_multiple_sources(headers)
+                response = requests.get(
+                    f'{self.navasan_base_url}latest',
+                    params={'api_key': self.navasan_api_key, 'items': 'usd,usdt'},
+                    headers=headers,
+                    timeout=10
+                )
                 
-                if not usd_to_irr:
-                    print("❌ Could not extract price from any source, using fallback")
-                    usd_to_irr = 1070000  # Current approximate rate
-                
-                print(f"✅ Current USD to IRR rate: {usd_to_irr:,.0f}")
+                if response.status_code == 200:
+                    data = response.json()
+                    usd_to_irr = float(data.get('usd', {}).get('value', 1070000))
+                    usdt_to_irr = float(data.get('usdt', {}).get('value', usd_to_irr))
+                    
+                    rates = {
+                        'USD_IRR': usd_to_irr,
+                        'IRR_USD': 1 / usd_to_irr,
+                        'USD_USDT': 1.0,
+                        'USDT_USD': 1.0,
+                        'USDT_IRR': usdt_to_irr,
+                        'IRR_USDT': 1 / usdt_to_irr,
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'source': 'navasan'
+                    }
+                    
+                    print(f"✅ Navasan Rates - USD: {usd_to_irr:,.0f} IRR, USDT: {usdt_to_irr:,.0f} IRR")
+                    self.cache[cache_key] = (rates, datetime.now())
+                    return rates
+                else:
+                    print(f"Navasan API failed with status {response.status_code}, using fallback")
                     
             except Exception as e:
-                print(f"❌ Error fetching rates: {e}")
-                usd_to_irr = 1070000  # Current fallback rate
+                print(f"Navasan API error: {e}, using fallback")
+            
+            # Fallback rates
+            usd_to_irr = 1070000
+            usdt_to_irr = 1070000
             
             rates = {
                 'USD_IRR': float(usd_to_irr),
                 'IRR_USD': 1 / float(usd_to_irr),
                 'USD_USDT': 1.0,
                 'USDT_USD': 1.0,
-                'USDT_IRR': float(usd_to_irr),
-                'IRR_USDT': 1 / float(usd_to_irr),
-                'timestamp': datetime.utcnow().isoformat()
+                'USDT_IRR': float(usdt_to_irr),
+                'IRR_USDT': 1 / float(usdt_to_irr),
+                'timestamp': datetime.utcnow().isoformat(),
+                'source': 'fallback'
             }
             
             self.cache[cache_key] = (rates, datetime.now())
             return rates
-        
-        def try_multiple_sources(self, headers):
-            """Try multiple methods to get the USD price"""
-            methods = [
-                self.scrape_tgju_direct,
-                self.scrape_tgju_api,
-                self.scrape_alternative_site
-            ]
-            
-            for method in methods:
-                try:
-                    rate = method(headers)
-                    if rate and 500000 < rate < 2000000:  # Reasonable range
-                        print(f"✅ Success with {method.__name__}: {rate:,.0f}")
-                        return rate
-                except Exception as e:
-                    print(f"❌ {method.__name__} failed: {e}")
-                    continue
-            
-            return None
-        
-        def scrape_tgju_direct(self, headers):
-            """Direct scraping from tgju.org"""
-            response = requests.get(
-                'https://www.tgju.org/profile/price_dollar_rl',
-                headers=headers,
-                timeout=10
-            )
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Method 1: Look for the main price in various selectors
-            price_selectors = [
-                '[data-col="info.last_price"]',
-                '.price',
-                '.value',
-                '.info-price',
-                'span.value',
-                'div.value',
-                '.market-price',
-                '[itemprop="price"]'
-            ]
-            
-            for selector in price_selectors:
-                elements = soup.select(selector)
-                for element in elements:
-                    price_text = element.get_text().strip()
-                    price = self.clean_price(price_text)
-                    if price:
-                        return price
-            
-            # Method 2: Look for specific data attributes
-            data_elements = soup.find_all(attrs={"data-col": "info.last_price"})
-            for element in data_elements:
-                price_text = element.get_text().strip()
-                price = self.clean_price(price_text)
-                if price:
-                    return price
-            
-            # Method 3: Search for numeric patterns in the entire page
-            text = soup.get_text()
-            price_patterns = [
-                r'(\d{1,3}(?:,\d{3})+,?\d*)',  # Numbers with Iranian commas
-                r'(\d{6,7})',  # 6-7 digit numbers
-            ]
-            
-            for pattern in price_patterns:
-                matches = re.findall(pattern, text)
-                for match in matches:
-                    price = self.clean_price(match)
-                    if price and 1000000 < price < 1200000:  # Current expected range
-                        return price
-            
-            return None
-        
-        def scrape_tgju_api(self, headers):
-            """Try to find API endpoints or JSON data"""
-            try:
-                # Sometimes tgju has API-like endpoints
-                api_response = requests.get(
-                    'https://api.tgju.org/v1/data/sana/json',
-                    headers=headers,
-                    timeout=5
-                )
-                if api_response.status_code == 200:
-                    data = api_response.json()
-                    # Look for USD price in the response
-                    for key, value in data.items():
-                        if 'price_dollar' in key.lower() and 'p' in value:
-                            price = self.clean_price(str(value['p']))
-                            if price:
-                                return price
-            except:
-                pass
-            
-            try:
-                # Another potential API endpoint
-                api_response = requests.get(
-                    'https://www.tgju.org/ajax/price.json',
-                    headers=headers,
-                    timeout=5
-                )
-                if api_response.status_code == 200:
-                    data = api_response.json()
-                    # Parse the JSON response for USD price
-                    usd_price = data.get('price_dollar_rl', {}).get('price')
-                    if usd_price:
-                        return self.clean_price(str(usd_price))
-            except:
-                pass
-            
-            return None
-        
-        def scrape_alternative_site(self, headers):
-            """Fallback to alternative sites"""
-            try:
-                response = requests.get(
-                    'https://www.tgju.org/',
-                    headers=headers,
-                    timeout=10
-                )
-                soup = BeautifulSoup(response.content, 'html.parser')
-                
-                # Look for USD price in the main page
-                usd_indicators = ['دلار', 'dollar', 'USD', 'price_dollar']
-                
-                for indicator in usd_indicators:
-                    elements = soup.find_all(string=re.compile(indicator, re.IGNORECASE))
-                    for element in elements:
-                        parent = element.parent
-                        if parent:
-                            # Look for numbers near the indicator
-                            text = parent.get_text()
-                            price_pattern = r'(\d{1,3}(?:,\d{3})+,?\d*)'
-                            matches = re.findall(price_pattern, text)
-                            for match in matches:
-                                price = self.clean_price(match)
-                                if price and 1000000 < price < 1200000:
-                                    return price
-            except:
-                pass
-            
-            return None
-        
-        def clean_price(self, price_text):
-            """Clean and convert price text to float"""
-            try:
-                # Remove commas (Iranian format uses commas as thousand separators)
-                cleaned = price_text.replace(',', '').strip()
-                
-                # Remove any non-numeric characters except decimal point
-                cleaned = ''.join(c for c in cleaned if c.isdigit() or c == '.')
-                
-                # Remove multiple decimal points
-                if '.' in cleaned:
-                    parts = cleaned.split('.')
-                    if len(parts) > 2:
-                        cleaned = parts[0] + '.' + ''.join(parts[1:])
-                
-                if cleaned:
-                    price = float(cleaned)
-                    # Validate that it's a reasonable exchange rate
-                    if 500000 < price < 2000000:
-                        return price
-            except Exception as e:
-                print(f"Error cleaning price '{price_text}': {e}")
-            
-            return None
 
-    exchange_service = ExchangeService()
+    exchange_service = ExchangeService(navasan_api_key='freeVeBEP365HYZw58h3bdFVxui8EQXC')
     wallet_service = None
     payment_service = None
 
@@ -401,13 +252,14 @@ def get_exchange_rates():
         # Return fallback rates
         fallback_rates = {
             'USD_IRR': 1070000,
-            'IRR_USD': 0.000093,
+            'IRR_USD': 0.000000934579,
             'USD_USDT': 1.0,
             'USDT_USD': 1.0,
             'USDT_IRR': 1070000,
-            'IRR_USDT': 0.000093,
+            'IRR_USDT': 0.000000934579,
             'timestamp': datetime.utcnow().isoformat(),
-            'note': 'Using fallback rates due to error'
+            'note': 'Using fallback rates due to error',
+            'source': 'fallback'
         }
         return jsonify(fallback_rates)
 
@@ -695,8 +547,266 @@ def charge_wallet():
         'amount': amount,
         'currency': currency
     })
+    
+# در app.py - آپدیت routeهای OTP
+@app.route('/api/payment/request-otp', methods=['POST'])
+@require_auth
+def request_otp():
+    """درخواست ارسال رمز پویا بر اساس کارت"""
+    try:
+        data = request.get_json()
+        card_number = data.get('card_number')
+        card_last4 = data.get('card_last4')
+        
+        if not all([card_number, card_last4]):
+            return jsonify({
+                'success': False, 
+                'error': 'لطفا اطلاعات کارت را وارد کنید'
+            }), 400
+        
+        # ارسال OTP - فقط بر اساس شماره کارت
+        success, message = sms_service.send_otp(card_number, card_last4)
+        
+        if success:
+            return jsonify({
+                'success': True, 
+                'message': message
+            })
+        else:
+            return jsonify({
+                'success': False, 
+                'error': message
+            }), 400
+            
+    except Exception as e:
+        print(f"❌ خطا در درخواست OTP: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'خطای سرور در ارسال رمز پویا'
+        }), 500
 
-# Add more routes as needed...
+@app.route('/api/payment/verify-otp', methods=['POST'])
+@require_auth
+def verify_otp():
+    """بررسی رمز پویا بر اساس کارت"""
+    try:
+        data = request.get_json()
+        card_number = data.get('card_number')
+        otp_code = data.get('otp_code')
+        
+        if not all([card_number, otp_code]):
+            return jsonify({
+                'success': False, 
+                'error': 'لطفا اطلاعات کارت و رمز پویا را وارد کنید'
+            }), 400
+        
+        # بررسی OTP
+        is_valid, message = sms_service.verify_otp(card_number, otp_code)
+        
+        if is_valid:
+            return jsonify({
+                'success': True, 
+                'message': message
+            })
+        else:
+            return jsonify({
+                'success': False, 
+                'error': message
+            }), 400
+            
+    except Exception as e:
+        print(f"❌ خطا در بررسی OTP: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'خطای سرور در بررسی رمز پویا'
+        }), 500
+
+@app.route('/api/payment/process-irr', methods=['POST'])
+@require_auth
+def process_irr_payment():
+    """پردازش پرداخت ریالی"""
+    user_id = get_user_from_token(request.headers.get('Authorization', '').replace('Bearer ', ''))
+    data = request.get_json()
+    
+    amount = data.get('amount')
+    otp_code = data.get('otp_code')
+    phone_number = data.get('phone_number')
+    
+    if not all([amount, otp_code, phone_number]):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    # بررسی رمز پویا
+    is_valid, otp_message = sms_service.verify_otp(phone_number, otp_code)
+    if not is_valid:
+        return jsonify({'success': False, 'error': otp_message}), 400
+    
+    # پردازش پرداخت
+    try:
+        conn = get_db_connection()
+        
+        # افزایش موجودی
+        wallet = conn.execute(
+            'SELECT * FROM wallets WHERE user_id = ?', (user_id,)
+        ).fetchone()
+        
+        if wallet:
+            conn.execute(
+                'UPDATE wallets SET irr_balance = irr_balance + ? WHERE user_id = ?',
+                (amount, user_id)
+            )
+        else:
+            wallet_id = secrets.token_hex(16)
+            conn.execute(
+                'INSERT INTO wallets (id, user_id, irr_balance) VALUES (?, ?, ?)',
+                (wallet_id, user_id, amount)
+            )
+        
+        # ثبت تراکنش
+        tx_id = secrets.token_hex(16)
+        conn.execute(
+            'INSERT INTO transactions (id, user_id, type, amount, currency, status, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (tx_id, user_id, 'charge', amount, 'IRR', 'completed', 'شارژ کیف پول - ریال', json.dumps({
+                'payment_method': 'iranian_card',
+                'otp_verified': True,
+                'phone_number': phone_number
+            }))
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'transaction_id': tx_id,
+            'amount': amount,
+            'currency': 'IRR'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/payment/withdraw', methods=['POST'])
+@require_auth
+def process_withdrawal():
+    """پردازش برداشت از حساب"""
+    user_id = get_user_from_token(request.headers.get('Authorization', '').replace('Bearer ', ''))
+    data = request.get_json()
+    
+    amount = data.get('amount')
+    currency = data.get('currency')
+    otp_code = data.get('otp_code')
+    phone_number = data.get('phone_number')
+    
+    if not all([amount, currency, otp_code, phone_number]):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    # بررسی رمز پویا
+    is_valid, otp_message = sms_service.verify_otp(phone_number, otp_code)
+    if not is_valid:
+        return jsonify({'success': False, 'error': otp_message}), 400
+    
+    # پردازش برداشت
+    try:
+        conn = get_db_connection()
+        
+        # بررسی موجودی
+        wallet = conn.execute(
+            'SELECT * FROM wallets WHERE user_id = ?', (user_id,)
+        ).fetchone()
+        
+        if not wallet:
+            return jsonify({'success': False, 'error': 'کیف پول یافت نشد'}), 404
+        
+        balance_field = f"{currency.lower()}_balance"
+        current_balance = wallet[balance_field] or 0.0
+        
+        if current_balance < amount:
+            return jsonify({'success': False, 'error': 'موجودی کافی نیست'}), 400
+        
+        # کسر از موجودی
+        conn.execute(
+            f'UPDATE wallets SET {balance_field} = {balance_field} - ? WHERE user_id = ?',
+            (amount, user_id)
+        )
+        
+        # ثبت تراکنش
+        tx_id = secrets.token_hex(16)
+        conn.execute(
+            'INSERT INTO transactions (id, user_id, type, amount, currency, status, description, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (tx_id, user_id, 'withdraw', amount, currency, 'completed', f'برداشت به کارت - {currency}', json.dumps({
+                'payment_method': 'card_withdrawal',
+                'otp_verified': True,
+                'phone_number': phone_number
+            }))
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'transaction_id': tx_id,
+            'amount': amount,
+            'currency': currency
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+        
+# در app.py - اضافه کردن endpoint جدید
+
+@app.route('/api/wallet/withdraw/check-balance', methods=['POST'])
+@require_auth
+def check_withdrawal_balance():
+    """بررسی موجودی برای برداشت"""
+    user_id = get_user_from_token(request.headers.get('Authorization', '').replace('Bearer ', ''))
+    data = request.get_json()
+    
+    amount = data.get('amount')
+    currency = data.get('currency')
+    
+    if not all([amount, currency]):
+        return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+    
+    conn = get_db_connection()
+    wallet = conn.execute(
+        'SELECT * FROM wallets WHERE user_id = ?', (user_id,)
+    ).fetchone()
+    
+    if not wallet:
+        return jsonify({'success': False, 'error': 'Wallet not found'}), 404
+    
+    balance_field = f"{currency.lower()}_balance"
+    current_balance = wallet[balance_field] or 0.0
+    
+    conn.close()
+    
+    if current_balance < amount:
+        return jsonify({
+            'success': False, 
+            'error': 'موجودی کافی نیست',
+            'current_balance': current_balance,
+            'requested_amount': amount
+        })
+    
+    # محاسبه کارمزد
+    fee_percentage = 0.01  # 1%
+    fee = amount * fee_percentage
+    
+    if currency == 'USD':
+        fee = max(fee, 1.0)  # حداقل 1 دلار
+    else:  # IRR
+        fee = max(fee, 50000)  # حداقل 50,000 ریال
+    
+    net_amount = amount - fee
+    
+    return jsonify({
+        'success': True,
+        'current_balance': current_balance,
+        'fee': fee,
+        'net_amount': net_amount,
+        'currency': currency
+    })
 
 if __name__ == '__main__':
     print("🚀 Starting PayMe Wallet API...")

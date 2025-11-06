@@ -6,7 +6,7 @@ from datetime import datetime
 
 class PaymentService:
     def __init__(self):
-        self.exchange_service = ExchangeService()
+        self.exchange_service = ExchangeService(navasan_api_key='freeVeBEP365HYZw58h3bdFVxui8EQXC')
         # Initialize Stripe (you'll need to set up Stripe keys)
         # stripe.api_key = config.STRIPE_SECRET_KEY
     
@@ -212,7 +212,7 @@ class PaymentService:
             return {'success': False, 'error': str(e)}
     
     def process_exchange(self, user_id, from_currency, to_currency, amount):
-        """Exchange one currency for another"""
+        """Exchange one currency for another using live rates"""
         try:
             # Check balance
             wallet = Wallet.query.filter_by(user_id=user_id).first()
@@ -223,7 +223,7 @@ class PaymentService:
             if from_balance < amount:
                 return {'success': False, 'error': 'Insufficient balance'}
             
-            # Calculate exchange
+            # Calculate exchange using live rates from Navasan
             exchange_result = self.exchange_service.calculate_exchange(
                 from_currency, to_currency, amount
             )
@@ -244,7 +244,8 @@ class PaymentService:
                     'to_currency': to_currency,
                     'exchange_rate': exchange_result['exchange_rate'],
                     'fee': exchange_result['fee'],
-                    'final_amount': exchange_result['final_amount']
+                    'final_amount': exchange_result['final_amount'],
+                    'rate_source': 'navasan'
                 }
             )
             db.session.add(transaction)
