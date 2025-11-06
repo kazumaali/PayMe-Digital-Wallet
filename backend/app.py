@@ -812,8 +812,8 @@ def check_withdrawal_balance():
 
 if __name__ == '__main__':
     print("🚀 Starting PayMe Wallet API...")
-    print("📍 API will be available at: http://localhost:5000")
-    print("📊 Test services at: http://localhost:5000/api/test-services")
-    print("🔗 Test API at: http://localhost:5000/api/test")
-    print("💱 Test exchange rates at: http://localhost:5000/api/exchange-rates")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("📍 API will be available at: http://192.168.1.102:5000")
+    print("📊 Test services at: http://192.168.1.102:5000/api/test-services")
+    print("🔗 Test API at: http://192.168.1.102:5000/api/test")
+    print("💱 Test exchange rates at: http://192.168.1.102:5000/api/exchange-rates")
+    app.run(debug=True, host='192.168.1.102', port=5000)
