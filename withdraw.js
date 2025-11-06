@@ -274,7 +274,7 @@ async function requestWithdrawalOTP() {
     try {
         console.log('📤 Sending withdrawal OTP request for card:', card.number);
         
-        const response = await fetch('${API_BASE}/payment/request-otp', {
+        const response = await fetch(`${API_BASE}/payment/request-otp`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -327,7 +327,7 @@ async function processWithdrawal() {
     showMessage('در حال پردازش درخواست برداشت...', 'success');
     
     try {
-        const response = await fetch('${API_BASE}/payment/withdraw', {
+        const response = await fetch(`${API_BASE}/payment/withdraw`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

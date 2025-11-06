@@ -298,7 +298,7 @@ async function requestDynamicCode() {
     try {
         console.log('📤 Sending OTP request for card:', selectedCard.number);
         
-        const response = await fetch('${API_BASE}/payment/request-otp', {
+        const response = await fetch(`${API_BASE}/payment/request-otp`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -425,7 +425,7 @@ async function processIRRPayment() {
         
         console.log('📤 Sending IRR payment request:', { amount, cardNumber });
         
-        const response = await fetch('${API_BASE}/payment/process-irr', {
+        const response = await fetch(`${API_BASE}/payment/process-irr`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
