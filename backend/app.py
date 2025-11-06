@@ -621,6 +621,8 @@ def verify_otp():
             'error': 'خطای سرور در بررسی رمز پویا'
         }), 500
 
+# در app.py - آپدیت endpointهای پرداخت
+
 @app.route('/api/payment/process-irr', methods=['POST'])
 @require_auth
 def process_irr_payment():
@@ -630,13 +632,13 @@ def process_irr_payment():
     
     amount = data.get('amount')
     otp_code = data.get('otp_code')
-    phone_number = data.get('phone_number')
+    card_number = data.get('card_number')  # ✅ تغییر از phone_number به card_number
     
-    if not all([amount, otp_code, phone_number]):
+    if not all([amount, otp_code, card_number]):
         return jsonify({'error': 'Missing required fields'}), 400
     
-    # بررسی رمز پویا
-    is_valid, otp_message = sms_service.verify_otp(phone_number, otp_code)
+    # بررسی رمز پویا - با card_number
+    is_valid, otp_message = sms_service.verify_otp(card_number, otp_code)
     if not is_valid:
         return jsonify({'success': False, 'error': otp_message}), 400
     
@@ -668,7 +670,7 @@ def process_irr_payment():
             (tx_id, user_id, 'charge', amount, 'IRR', 'completed', 'شارژ کیف پول - ریال', json.dumps({
                 'payment_method': 'iranian_card',
                 'otp_verified': True,
-                'phone_number': phone_number
+                'card_number': card_number[-4:]  # فقط 4 رقم آخر
             }))
         )
         
@@ -695,13 +697,13 @@ def process_withdrawal():
     amount = data.get('amount')
     currency = data.get('currency')
     otp_code = data.get('otp_code')
-    phone_number = data.get('phone_number')
+    card_number = data.get('card_number')  # ✅ تغییر از phone_number به card_number
     
-    if not all([amount, currency, otp_code, phone_number]):
+    if not all([amount, currency, otp_code, card_number]):
         return jsonify({'error': 'Missing required fields'}), 400
     
-    # بررسی رمز پویا
-    is_valid, otp_message = sms_service.verify_otp(phone_number, otp_code)
+    # بررسی رمز پویا - با card_number
+    is_valid, otp_message = sms_service.verify_otp(card_number, otp_code)
     if not is_valid:
         return jsonify({'success': False, 'error': otp_message}), 400
     
@@ -736,7 +738,7 @@ def process_withdrawal():
             (tx_id, user_id, 'withdraw', amount, currency, 'completed', f'برداشت به کارت - {currency}', json.dumps({
                 'payment_method': 'card_withdrawal',
                 'otp_verified': True,
-                'phone_number': phone_number
+                'card_number': card_number[-4:]  # فقط 4 رقم آخر
             }))
         )
         
