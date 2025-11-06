@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'http://192.168.1.102:5000/api';
 
 // Load user balances from backend when page loads
 document.addEventListener('DOMContentLoaded', function() {
