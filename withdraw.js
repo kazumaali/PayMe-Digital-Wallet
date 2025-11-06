@@ -8,17 +8,23 @@ let selectedCurrency = 'USD';
 let userCards = [];
 let currentBalance = { USD: 0, IRR: 0 };
 
-function loadUserData() {
-    // Load current user data
+async function loadUserData() {
+    console.log('🔧 Withdraw page loaded, testing connection...');
+    await testConnection();
+    
+    // بقیه کد...
     const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
     
-    // Load user balances
-    const users = JSON.parse(localStorage.getItem('users')) || [];
-    const userData = users.find(u => u.email === currentUser.email) || {};
-    currentBalance.USD = userData.balanceUSD || 0;
-    currentBalance.IRR = userData.balanceIRR || 0;
+    // ابتدا از backend موجودی بگیرید
+    await updateBalancesFromBackend();
     
-    // Load user cards from localStorage (shared with charge.html)
+    // سپس از localStorage به عنوان fallback استفاده کنید
+    if (currentUser.balances) {
+        currentBalance.USD = currentUser.balances.USD || 0;
+        currentBalance.IRR = currentUser.balances.IRR || 0;
+    }
+    
+    // Load user cards from localStorage
     userCards = JSON.parse(localStorage.getItem('userCards')) || [];
     
     updateWithdrawalInfo();
@@ -253,6 +259,12 @@ async function requestWithdrawalOTP() {
         return;
     }
     
+    // تست اتصال اول
+    const isConnected = await testConnection();
+    if (!isConnected) {
+        return;
+    }
+    
     const cardIndex = parseInt(cardSelect.value);
     const filteredCards = userCards.filter(c => c.currency === selectedCurrency);
     const card = filteredCards[cardIndex];
@@ -260,6 +272,8 @@ async function requestWithdrawalOTP() {
     showMessage('در حال ارسال رمز پویا...', 'success');
     
     try {
+        console.log('📤 Sending withdrawal OTP request for card:', card.number);
+        
         const response = await fetch('http://localhost:5000/api/payment/request-otp', {
             method: 'POST',
             headers: {
@@ -267,12 +281,14 @@ async function requestWithdrawalOTP() {
                 'Authorization': `Bearer ${getAuthToken()}`
             },
             body: JSON.stringify({
-                card_number: card.number,  // ✅ ارسال شماره کامل کارت
-                card_last4: card.last4     // ✅ ارسال 4 رقم آخر
+                card_number: card.number,
+                card_last4: card.last4
             })
         });
 
+        console.log('📥 Response status:', response.status);
         const data = await response.json();
+        console.log('📥 Response data:', data);
         
         if (data.success) {
             showMessage('✅ رمز پویا ارسال شد. لطفا پیامک خود را چک کنید.', 'success');
@@ -282,8 +298,8 @@ async function requestWithdrawalOTP() {
             showMessage('❌ ' + data.error, 'error');
         }
     } catch (error) {
-        console.error('Error requesting OTP:', error);
-        showMessage('خطا در ارتباط با سرور', 'error');
+        console.error('❌ Error requesting OTP:', error);
+        showMessage('خطا در ارتباط با سرور. لطفا دوباره تلاش کنید.', 'error');
     }
 }
 
@@ -369,5 +385,23 @@ async function updateBalancesFromBackend() {
         }
     } catch (error) {
         console.error('Error updating balances from backend:', error);
+    }
+}
+
+async function testConnection() {
+    try {
+        const response = await fetch(`${API_BASE}/test`);
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Connection to server successful:', data);
+            return true;
+        } else {
+            console.error('❌ Server response not OK:', response.status);
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Connection to server failed:', error);
+        showMessage('اتصال به سرور برقرار نیست. لطفا از روشن بودن سرور اطمینان حاصل کنید.', 'error');
+        return false;
     }
 }
