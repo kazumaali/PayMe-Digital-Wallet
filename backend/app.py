@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(__file__))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
-CORS(app, origins=["http://localhost", "http://127.0.0.1", "http://192.168.1.102"])
+CORS(app, origins=["http://localhost", "http://127.0.0.1", "http://localhost:3000", "http://127.0.0.1:3000"])
 
 # Import services
 try:
@@ -810,10 +810,11 @@ def check_withdrawal_balance():
         'currency': currency
     })
 
+# در انتهای فایل app.py این خط را تغییر دهید:
 if __name__ == '__main__':
     print("🚀 Starting PayMe Wallet API...")
-    print("📍 API will be available at: http://192.168.1.102:5000")
-    print("📊 Test services at: http://192.168.1.102:5000/api/test-services")
-    print("🔗 Test API at: http://192.168.1.102:5000/api/test")
-    print("💱 Test exchange rates at: http://192.168.1.102:5000/api/exchange-rates")
-    app.run(debug=True, host='192.168.1.102', port=5000)
+    print("📍 API will be available at: http://localhost:5000")
+    print("📊 Test services at: http://localhost:5000/api/test-services")
+    print("🔗 Test API at: http://localhost:5000/api/test")
+    print("💱 Test exchange rates at: http://localhost:5000/api/exchange-rates")
+    app.run(debug=True, host='127.0.0.1', port=5000)  # تغییر به 127.0.0.1
