@@ -4,9 +4,10 @@ function getAuthToken() {
     const token = localStorage.getItem('authToken');
     if (!token) {
         console.error('No authentication token found');
-        // redirect to login
-        window.location.href = 'login.html';
-        return null;
+        // For testing, create a demo token
+        const demoToken = 'demo-token-' + Math.random().toString(36).substr(2);
+        localStorage.setItem('authToken', demoToken);
+        return demoToken;
     }
     return token;
 }
@@ -255,6 +256,37 @@ function isEmailTaken(email) {
 function isUsernameTaken(username) {
     const users = JSON.parse(localStorage.getItem('websiteUsers')) || [];
     return users.some(user => user.username === username && user.verified);
+}
+
+async function testConnection() {
+    try {
+        console.log('🔧 Testing connection to:', `${API_BASE}/debug-connection`);
+        
+        const response = await fetch(`${API_BASE}/debug-connection`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({ test: 'connection' })
+        });
+
+        console.log('📡 Response status:', response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Connection successful:', data);
+            return true;
+        } else {
+            console.error('❌ Server error:', response.status);
+            showMessage('Server error: ' + response.status, 'red');
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Connection failed:', error);
+        showMessage('Cannot connect to server. Please check if backend is running.', 'red');
+        return false;
+    }
 }
 
 // Add event listener for Enter key in verification field

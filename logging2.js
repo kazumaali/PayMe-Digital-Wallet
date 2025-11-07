@@ -1,7 +1,15 @@
 const API_BASE = 'http://127.0.0.1:5000/api';
 
 function getAuthToken() {
-    return localStorage.getItem('authToken');
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('No authentication token found');
+        // For testing, create a demo token
+        const demoToken = 'demo-token-' + Math.random().toString(36).substr(2);
+        localStorage.setItem('authToken', demoToken);
+        return demoToken;
+    }
+    return token;
 }
 
 function login() {
@@ -126,6 +134,37 @@ function login() {
                 }
             });
         });
+
+async function testConnection() {
+    try {
+        console.log('🔧 Testing connection to:', `${API_BASE}/debug-connection`);
+        
+        const response = await fetch(`${API_BASE}/debug-connection`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({ test: 'connection' })
+        });
+
+        console.log('📡 Response status:', response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Connection successful:', data);
+            return true;
+        } else {
+            console.error('❌ Server error:', response.status);
+            showMessage('Server error: ' + response.status, 'red');
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Connection failed:', error);
+        showMessage('Cannot connect to server. Please check if backend is running.', 'red');
+        return false;
+    }
+}
 
         // Check if user is already logged in (optional - shows message but doesn't redirect)
     document.addEventListener('DOMContentLoaded', function() {

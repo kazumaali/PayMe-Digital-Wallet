@@ -7,6 +7,18 @@ document.addEventListener('DOMContentLoaded', function() {
     startLiveRatesUpdates(); // Optional: for real-time updates
 });
 
+function getAuthToken() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('No authentication token found');
+        // For testing, create a demo token
+        const demoToken = 'demo-token-' + Math.random().toString(36).substr(2);
+        localStorage.setItem('authToken', demoToken);
+        return demoToken;
+    }
+    return token;
+}
+
 // Updated function to get balances from backend
 async function updateBalances() {
     try {
@@ -120,27 +132,33 @@ function fallbackToLocalStorage() {
     }
 }
 
-function getAuthToken() {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-        console.error('No authentication token found');
-        // redirect to login
-        window.location.href = 'login.html';
-        return null;
-    }
-    return token;
-}
-
 async function testConnection() {
     try {
-        const response = await fetch(`${API_BASE}/test`);
+        console.log('🔧 Testing connection to:', `${API_BASE}/debug-connection`);
+        
+        const response = await fetch(`${API_BASE}/debug-connection`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({ test: 'connection' })
+        });
+
+        console.log('📡 Response status:', response.status);
+        
         if (response.ok) {
-            console.log('✅ Connection to server successful');
+            const data = await response.json();
+            console.log('✅ Connection successful:', data);
             return true;
+        } else {
+            console.error('❌ Server error:', response.status);
+            showMessage('Server error: ' + response.status, 'red');
+            return false;
         }
     } catch (error) {
         console.error('❌ Connection failed:', error);
-        showMessage('سرور در دسترس نیست. لطفا بعدا تلاش کنید.', 'red');
+        showMessage('Cannot connect to server. Please check if backend is running.', 'red');
         return false;
     }
 }
