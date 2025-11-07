@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(__file__))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
-CORS(app, origins=["http://localhost", "http://127.0.0.1", "http://localhost:3000", "http://127.0.0.1:3000"])
+CORS(app, origins=["http://localhost", "http://127.0.0.1", "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8080", "http://127.0.0.1:8080"], supports_credentials=True)
 
 # Import services
 try:
@@ -36,84 +36,53 @@ except ImportError as e:
     print(f"❌ Import error: {e}")
     print("⚠️  Running with built-in exchange service only")
     
-    # Fallback: Use the built-in exchange service with your API key
-    class ExchangeService:
-        def __init__(self, navasan_api_key='freeVeBEP365HYZw58h3bdFVxui8EQXC'):
-            self.cache = {}
-            self.cache_timeout = 300
-            self.navasan_api_key = navasan_api_key
-            self.navasan_base_url = 'https://api.navasan.tech/v1/'
+    # Simplified service implementation
+class ExchangeService:
+    def __init__(self, navasan_api_key='freeVeBEP365HYZw58h3bdFVxui8EQXC'):
+        self.navasan_api_key = navasan_api_key
+        self.cache = {}
+        self.cache_timeout = 300
+
+    def get_current_rates(self):
+        cache_key = 'exchange_rates'
+        if cache_key in self.cache:
+            cached_data, timestamp = self.cache[cache_key]
+            if datetime.now() - timestamp < timedelta(seconds=self.cache_timeout):
+                return cached_data
         
-        def get_current_rates(self):
-            """Get current exchange rates from Navasan API"""
-            cache_key = 'exchange_rates'
-            if cache_key in self.cache:
-                cached_data, timestamp = self.cache[cache_key]
-                if datetime.now() - timestamp < timedelta(seconds=self.cache_timeout):
-                    return cached_data
-            
-            try:
-                print("🌐 Fetching live exchange rates from Navasan API...")
-                
-                # Try Navasan API
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json',
-                }
-                
-                response = requests.get(
-                    f'{self.navasan_base_url}latest',
-                    params={'api_key': self.navasan_api_key, 'items': 'usd,usdt'},
-                    headers=headers,
-                    timeout=10
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    usd_to_irr = float(data.get('usd', {}).get('value', 1070000))
-                    usdt_to_irr = float(data.get('usdt', {}).get('value', usd_to_irr))
-                    
-                    rates = {
-                        'USD_IRR': usd_to_irr,
-                        'IRR_USD': 1 / usd_to_irr,
-                        'USD_USDT': 1.0,
-                        'USDT_USD': 1.0,
-                        'USDT_IRR': usdt_to_irr,
-                        'IRR_USDT': 1 / usdt_to_irr,
-                        'timestamp': datetime.utcnow().isoformat(),
-                        'source': 'navasan'
-                    }
-                    
-                    print(f"✅ Navasan Rates - USD: {usd_to_irr:,.0f} IRR, USDT: {usdt_to_irr:,.0f} IRR")
-                    self.cache[cache_key] = (rates, datetime.now())
-                    return rates
-                else:
-                    print(f"Navasan API failed with status {response.status_code}, using fallback")
-                    
-            except Exception as e:
-                print(f"Navasan API error: {e}, using fallback")
-            
-            # Fallback rates
+        try:
+            # Your existing rate fetching logic here
             usd_to_irr = 1070000
-            usdt_to_irr = 1070000
-            
             rates = {
                 'USD_IRR': float(usd_to_irr),
                 'IRR_USD': 1 / float(usd_to_irr),
                 'USD_USDT': 1.0,
                 'USDT_USD': 1.0,
-                'USDT_IRR': float(usdt_to_irr),
-                'IRR_USDT': 1 / float(usdt_to_irr),
+                'USDT_IRR': float(usd_to_irr),
+                'IRR_USDT': 1 / float(usd_to_irr),
                 'timestamp': datetime.utcnow().isoformat(),
-                'source': 'fallback'
+                'source': 'static'
             }
             
             self.cache[cache_key] = (rates, datetime.now())
             return rates
+            
+        except Exception as e:
+            print(f"Error getting rates: {e}")
+            # Fallback rates
+            return {
+                'USD_IRR': 1070000,
+                'IRR_USD': 0.000000934579,
+                'USD_USDT': 1.0,
+                'USDT_USD': 1.0,
+                'USDT_IRR': 1070000,
+                'IRR_USDT': 0.000000934579,
+                'timestamp': datetime.utcnow().isoformat(),
+                'source': 'fallback'
+            }
 
-    exchange_service = ExchangeService(navasan_api_key='freeVeBEP365HYZw58h3bdFVxui8EQXC')
-    wallet_service = None
-    payment_service = None
+# Initialize services
+exchange_service = ExchangeService()
 
 # Simple JWT-like authentication (for demo purposes)
 def create_token(user_id):
@@ -808,6 +777,23 @@ def check_withdrawal_balance():
         'fee': fee,
         'net_amount': net_amount,
         'currency': currency
+    })
+    
+@app.route('/api/debug-connection', methods=['GET', 'POST'])
+def debug_connection():
+    print("🔧 Debug connection called")
+    print("📧 Headers:", dict(request.headers))
+    print("📦 Method:", request.method)
+    
+    if request.method == 'POST':
+        print("📝 POST Data:", request.get_json())
+    
+    return jsonify({
+        'status': 'connected',
+        'message': 'Server is responding',
+        'timestamp': datetime.utcnow().isoformat(),
+        'your_ip': request.remote_addr,
+        'method': request.method
     })
 
 # در انتهای فایل app.py این خط را تغییر دهید:
