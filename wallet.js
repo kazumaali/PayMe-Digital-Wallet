@@ -1,4 +1,4 @@
-const API_BASE = 'http://192.168.1.102:5000/api';
+const API_BASE = 'http://localhost:5000/api';
 
 // Load user balances from backend when page loads
 document.addEventListener('DOMContentLoaded', function() {
@@ -121,9 +121,28 @@ function fallbackToLocalStorage() {
 }
 
 function getAuthToken() {
-    // In a real app, you'd get this from your authentication system
-    // For now, we'll use a simple token from localStorage
-    return localStorage.getItem('authToken') || localStorage.getItem('currentUserToken');
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('No authentication token found');
+        // redirect to login
+        window.location.href = 'login.html';
+        return null;
+    }
+    return token;
+}
+
+async function testConnection() {
+    try {
+        const response = await fetch(`${API_BASE}/test`);
+        if (response.ok) {
+            console.log('✅ Connection to server successful');
+            return true;
+        }
+    } catch (error) {
+        console.error('❌ Connection failed:', error);
+        showMessage('سرور در دسترس نیست. لطفا بعدا تلاش کنید.', 'red');
+        return false;
+    }
 }
 
 // If you want to keep the original function name for compatibility, you can do:

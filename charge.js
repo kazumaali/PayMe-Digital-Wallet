@@ -1,7 +1,14 @@
-const API_BASE = 'http://192.168.1.102:5000/api';
+const API_BASE = 'http://localhost:5000/api';
 
 function getAuthToken() {
-    return localStorage.getItem('authToken');
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('No authentication token found');
+        // redirect to login
+        window.location.href = 'login.html';
+        return null;
+    }
+    return token;
 }
 
 const currencySelect = document.getElementById('currency');
@@ -544,16 +551,12 @@ async function testConnection() {
     try {
         const response = await fetch(`${API_BASE}/test`);
         if (response.ok) {
-            const data = await response.json();
-            console.log('✅ Connection to server successful:', data);
+            console.log('✅ Connection to server successful');
             return true;
-        } else {
-            console.error('❌ Server response not OK:', response.status);
-            return false;
         }
     } catch (error) {
-        console.error('❌ Connection to server failed:', error);
-        showMessage('اتصال به سرور برقرار نیست. لطفا از روشن بودن سرور اطمینان حاصل کنید.', 'red');
+        console.error('❌ Connection failed:', error);
+        showMessage('سرور در دسترس نیست. لطفا بعدا تلاش کنید.', 'red');
         return false;
     }
 }

@@ -1,7 +1,14 @@
-const API_BASE = 'http://192.168.1.102:5000/api';
+const API_BASE = 'http://localhost:5000/api';
 
 function getAuthToken() {
-    return localStorage.getItem('authToken');
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        console.error('No authentication token found');
+        // redirect to login
+        window.location.href = 'login.html';
+        return null;
+    }
+    return token;
 }
 
 const username = document.getElementById('signupUsername');
