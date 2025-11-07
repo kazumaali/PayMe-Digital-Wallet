@@ -18,7 +18,7 @@ sys.path.append(os.path.dirname(__file__))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
-CORS(app)
+CORS(app, origins=["http://localhost", "http://127.0.0.1", "http://192.168.1.102"])
 
 # Import services
 try:
