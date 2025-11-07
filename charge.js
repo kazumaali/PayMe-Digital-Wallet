@@ -349,7 +349,7 @@ async function requestWithdrawalOTP() {
     showMessage('درخواست رمز پویا ارسال شد...', 'success');
     
     try {
-        const response = await fetch('http://localhost:5000/api/payment/request-otp', {
+        const response = await fetch(`${API_BASE}/payment/request-otp`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
